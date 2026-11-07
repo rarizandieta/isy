@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>isi · BD — Módulo Usuarios/Autenticación</title>
+<style>
+  :root {
+    --buyer: #2E7D32;
+    --seller: #6A1B9A;
+    --service: #1565C0;
+    --ink: #1b1b1f;
+    --muted: #5b5b66;
+    --line: #e3e3ea;
+    --bg: #f7f7fb;
+    --card: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.5;
+  }
+  header {
+    background: linear-gradient(135deg, var(--service), var(--seller));
+    color: #fff;
+    padding: 28px 24px;
+  }
+  header h1 { margin: 0 0 4px; font-size: 24px; }
+  header p { margin: 0; opacity: .9; font-size: 14px; }
+  main { max-width: 1040px; margin: 0 auto; padding: 24px; }
+  section { margin-bottom: 32px; }
+  h2 {
+    font-size: 18px; margin: 0 0 12px;
+    border-left: 4px solid var(--service); padding-left: 10px;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    margin-bottom: 16px; overflow-x: auto;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+  .legend b { color: var(--ink); }
+  .mermaid { text-align: center; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: #fafafe; font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  code { background: #f0f0f6; padding: 1px 6px; border-radius: 6px; font-size: 12.5px; }
+  .tbl-title { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 16px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .pk { color: #b26a00; font-weight: 700; }
+  .fk { color: var(--service); font-weight: 700; }
+  .u  { color: var(--seller); font-weight: 700; }
+  .ix { color: var(--buyer); font-weight: 700; }
+  .muted { color: var(--muted); }
+  .pill { font-size: 11px; background: #eef; color: #335; padding: 2px 8px; border-radius: 20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>isi · Base de datos</h1>
+  <p>Módulo 1 — Usuarios y Autenticación · Ingeniería inversa de Registro, OTP y Login · PostgreSQL</p>
+</header>
+
+<main>
+  <section>
+    <div class="legend card">
+      <span><b class="pk">PK</b> llave primaria</span>
+      <span><b class="fk">FK</b> llave foránea</span>
+      <span><b class="u">U</b> única</span>
+      <span><b class="ix">IX</b> índice</span>
+      <span class="muted">Secretos (contraseña, OTP, tokens) se guardan <b>hasheados</b>.</span>
+      <span class="muted">Auditoría en <b>todas</b> las tablas: <code>created_at</code>, <code>created_by</code>, <code>updated_at</code>, <code>updated_by</code> (<code>*_by → users.id</code>).</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Diagrama entidad-relación</h2>
+    <div class="card">
+      <pre class="mermaid">
+erDiagram
+    users ||--o{ auth_identities          : "métodos de acceso"
+    users ||--o{ email_verification_codes : "códigos OTP"
+    users ||--o{ password_reset_tokens    : "reseteos de clave"
+    users ||--o{ user_sessions            : "sesiones activas"
+
+    users {
+        uuid        id PK
+        varchar     full_name
+        citext      email UK
+        user_status status
+        timestamptz email_verified_at
+        timestamptz last_login_at
+    }
+    auth_identities {
+        uuid          id PK
+        uuid          user_id FK
+        auth_provider provider
+        varchar       provider_uid
+        text          password_hash
+        citext        email
+    }
+    email_verification_codes {
+        uuid        id PK
+        uuid        user_id FK
+        text        code_hash
+        citext      destination
+        smallint    attempts
+        timestamptz expires_at
+        timestamptz consumed_at
+    }
+    password_reset_tokens {
+        uuid        id PK
+        uuid        user_id FK
+        text        token_hash
+        timestamptz expires_at
+        timestamptz consumed_at
+    }
+    user_sessions {
+        uuid        id PK
+        uuid        user_id FK
+        text        refresh_token_hash
+        timestamptz expires_at
+        timestamptz revoked_at
+    }
+      </pre>
+    </div>
+    <p class="muted">Lectura: una cuenta (<code>users</code>) tiene muchos métodos de acceso,
+      muchos códigos OTP, muchos tokens de reseteo y muchas sesiones (relación 1 a muchos).
+      El diagrama omite las columnas de auditoría por legibilidad; están en el detalle de cada tabla.</p>
+  </section>
+
+  <section>
+    <h2>Estructura de las tablas</h2>
+
+    <div class="card">
+      <p class="tbl-title"><span class="dot" style="background:var(--service)"></span><b>users</b> — cuenta raíz (la persona)</p>
+      <table>
+        <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
+        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td>Identificador de la cuenta</td></tr>
+        <tr><td><code>full_name</code></td><td>varchar(120)</td><td></td><td>no</td><td>Campo <b>Nombre</b> del registro</td></tr>
+        <tr><td><code>email</code></td><td>citext</td><td><span class="u">U</span></td><td>no</td><td>Campo <b>Correo</b>; único, sin distinción de mayúsculas</td></tr>
+        <tr><td><code>avatar_url</code></td><td>text</td><td></td><td>sí</td><td>Avatar opcional</td></tr>
+        <tr><td><code>status</code></td><td>enum user_status</td><td></td><td>no</td><td><code>pending_verification</code> → <code>active</code> tras OTP</td></tr>
+        <tr><td><code>email_verified_at</code></td><td>timestamptz</td><td></td><td>sí</td><td>Momento en que se verificó el correo</td></tr>
+        <tr><td><code>last_login_at</code></td><td>timestamptz</td><td></td><td>sí</td><td>Se actualiza en cada login</td></tr>
+        <tr><td><code>created_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de creación</td></tr>
+        <tr><td><code>created_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
+        <tr><td><code>updated_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de última modificación</td></tr>
+        <tr><td><code>updated_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
+      </table>
+      <p class="muted">user_status: <code>pending_verification</code> · <code>active</code> · <code>suspended</code> · <code>deleted</code>.
+        Futuro: <code>last_active_profile_id → profiles(id)</code> (módulo Perfiles).</p>
+    </div>
+
+    <div class="card">
+      <p class="tbl-title"><span class="dot" style="background:var(--seller)"></span><b>auth_identities</b> — métodos de acceso (contraseña + SSO)</p>
+      <table>
+        <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
+        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>user_id</code></td><td>uuid</td><td><span class="fk">FK</span> <span class="ix">IX</span></td><td>no</td><td>Dueño (borrado en cascada)</td></tr>
+        <tr><td><code>provider</code></td><td>enum auth_provider</td><td><span class="u">U</span>(user_id,provider)</td><td>no</td><td><code>password</code> · <code>google</code> · <code>apple</code></td></tr>
+        <tr><td><code>provider_uid</code></td><td>varchar(255)</td><td><span class="u">U</span>(provider,uid)</td><td>sí</td><td>ID del proveedor SSO; <b>null</b> en contraseña</td></tr>
+        <tr><td><code>password_hash</code></td><td>text</td><td></td><td>sí</td><td>bcrypt/argon2; <b>solo</b> en <code>password</code></td></tr>
+        <tr><td><code>email</code></td><td>citext</td><td></td><td>sí</td><td>Correo que devuelve el proveedor</td></tr>
+        <tr><td><code>created_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de creación</td></tr>
+        <tr><td><code>created_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
+        <tr><td><code>updated_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de última modificación</td></tr>
+        <tr><td><code>updated_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
+      </table>
+      <p class="muted">Máx. un método por proveedor por usuario; una identidad SSO no se comparte.
+        Fila <code>password</code> → lleva hash, sin uid; fila SSO → lleva uid, sin hash.</p>
+    </div>
+
+    <div class="card">
+      <p class="tbl-title"><span class="dot" style="background:var(--buyer)"></span><b>email_verification_codes</b> — códigos OTP</p>
+      <table>
+        <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
+        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>user_id</code></td><td>uuid</td><td><span class="fk">FK</span> <span class="ix">IX</span></td><td>no</td><td>A quién pertenece el código</td></tr>
+        <tr><td><code>purpose</code></td><td>enum verification_purpose</td><td></td><td>no</td><td><code>signup</code> (default), <code>login</code>, <code>email_change</code></td></tr>
+        <tr><td><code>code_hash</code></td><td>text</td><td></td><td>no</td><td><b>Hash</b> del código de 6 dígitos</td></tr>
+        <tr><td><code>destination</code></td><td>citext</td><td></td><td>no</td><td>Correo al que se envió</td></tr>
+        <tr><td><code>attempts</code> / <code>max_attempts</code></td><td>smallint</td><td></td><td>no</td><td>Intentos / tope (default 5)</td></tr>
+        <tr><td><code>expires_at</code></td><td>timestamptz</td><td></td><td>no</td><td><b>created_at + 15 min</b> (contador de la UI)</td></tr>
+        <tr><td><code>consumed_at</code></td><td>timestamptz</td><td></td><td>sí</td><td>Al verificar o invalidar por reenvío</td></tr>
+        <tr><td><code>created_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de creación</td></tr>
+        <tr><td><code>created_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
+        <tr><td><code>updated_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de última modificación</td></tr>
+        <tr><td><code>updated_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
+      </table>
+      <p class="muted">Un solo código vivo por usuario+propósito: al <b>solicitar de nuevo</b> se
+        consume el anterior y se inserta uno nuevo (reinicia los 15 min).</p>
+    </div>
+
+    <div class="card">
+      <p class="tbl-title"><span class="dot" style="background:#b26a00"></span><b>password_reset_tokens</b> — recuperación de contraseña</p>
+      <table>
+        <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
+        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>user_id</code></td><td>uuid</td><td><span class="fk">FK</span> <span class="ix">IX</span></td><td>no</td><td></td></tr>
+        <tr><td><code>token_hash</code></td><td>text</td><td><span class="u">U</span></td><td>no</td><td>Hash del token enviado por correo</td></tr>
+        <tr><td><code>expires_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Vigencia corta (p. ej. 1 h)</td></tr>
+        <tr><td><code>consumed_at</code></td><td>timestamptz</td><td></td><td>sí</td><td>Al usarse</td></tr>
+        <tr><td><code>created_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de creación</td></tr>
+        <tr><td><code>created_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
+        <tr><td><code>updated_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de última modificación</td></tr>
+        <tr><td><code>updated_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <p class="tbl-title"><span class="dot" style="background:#607d8b"></span><b>user_sessions</b> — sesiones / "seguir conectado"</p>
+      <table>
+        <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
+        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>user_id</code></td><td>uuid</td><td><span class="fk">FK</span> <span class="ix">IX</span></td><td>no</td><td></td></tr>
+        <tr><td><code>refresh_token_hash</code></td><td>text</td><td><span class="u">U</span></td><td>no</td><td>Hash del refresh token</td></tr>
+        <tr><td><code>user_agent</code></td><td>text</td><td></td><td>sí</td><td>Dispositivo/navegador</td></tr>
+        <tr><td><code>ip_address</code></td><td>inet</td><td></td><td>sí</td><td>IP de origen</td></tr>
+        <tr><td><code>last_used_at</code></td><td>timestamptz</td><td></td><td>sí</td><td>Último uso</td></tr>
+        <tr><td><code>expires_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Caducidad (p. ej. 30 días)</td></tr>
+        <tr><td><code>revoked_at</code></td><td>timestamptz</td><td></td><td>sí</td><td>Cierre de sesión / revocación</td></tr>
+        <tr><td><code>created_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de creación</td></tr>
+        <tr><td><code>created_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
+        <tr><td><code>updated_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de última modificación</td></tr>
+        <tr><td><code>updated_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Mapeo pantalla → columna</h2>
+    <div class="card">
+      <p class="tbl-title"><b>Registro</b></p>
+      <table>
+        <tr><th>Campo UI</th><th>Destino</th></tr>
+        <tr><td>Nombre</td><td><code>users.full_name</code></td></tr>
+        <tr><td>Correo</td><td><code>users.email</code></td></tr>
+        <tr><td>Contraseña</td><td><code>auth_identities.password_hash</code> (provider=password)</td></tr>
+        <tr><td>Confirmar contraseña</td><td><span class="muted">no se persiste (validación de cliente)</span></td></tr>
+        <tr><td>Continuar con Apple / Google</td><td><code>auth_identities(provider, provider_uid, email)</code></td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <p class="tbl-title"><b>Verificación OTP</b></p>
+      <table>
+        <tr><th>Elemento UI</th><th>Destino</th></tr>
+        <tr><td>Código de 6 dígitos</td><td><code>email_verification_codes.code_hash</code></td></tr>
+        <tr><td>Correo destino</td><td><code>email_verification_codes.destination</code></td></tr>
+        <tr><td>Contador 15:00</td><td><code>email_verification_codes.expires_at</code></td></tr>
+        <tr><td>Verificar OK</td><td><code>users.email_verified_at</code>, <code>users.status='active'</code>, <code>consumed_at</code></td></tr>
+        <tr><td>Solicitar de nuevo</td><td>nueva fila (invalida la anterior)</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <p class="tbl-title"><b>Login</b></p>
+      <table>
+        <tr><th>Elemento UI</th><th>Destino</th></tr>
+        <tr><td>Correo + contraseña</td><td>lee <code>users</code> por email; verifica hash en <code>auth_identities</code></td></tr>
+        <tr><td>Entrada exitosa</td><td><code>users.last_login_at</code> + fila en <code>user_sessions</code></td></tr>
+        <tr><td>Apple / Google</td><td>lee <code>auth_identities(provider, provider_uid)</code></td></tr>
+        <tr><td>¿Olvidaste tu contraseña?</td><td><code>password_reset_tokens</code></td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Política de sesión y tokens (access vs refresh)</h2>
+    <div class="card">
+      <p><b>El access token NO se guarda en la base.</b> Es de vida corta y stateless (JWT
+        firmado): el backend lo valida por <b>firma</b>, sin tocar la BD. Por eso
+        <code>user_sessions</code> guarda <b>solo el hash del refresh token</b> — y así debe ser.</p>
+      <table>
+        <tr><th>Token</th><th>Vigencia típica</th><th>Dónde se guarda (cliente)</th><th>Qué guarda el servidor</th></tr>
+        <tr><td>Access token</td><td>15–60 min</td><td>memoria (o secure storage)</td><td><b>nada</b> (se valida por firma)</td></tr>
+        <tr><td>Refresh token</td><td>30–60 días deslizante + tope absoluto</td><td>secure storage del SO (Keychain/Keystore)</td><td><b>solo el hash</b> en <code>user_sessions</code></td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <p class="tbl-title"><b>Ciclo de vida</b></p>
+      <ol class="muted" style="margin:0; padding-left:18px;">
+        <li>Login/registro → emite access + refresh; guarda el <b>hash</b> del refresh en <code>user_sessions</code>.</li>
+        <li>El access caduca → el cliente refresca con su refresh token → nuevo par (<b>refresco silencioso</b>).</li>
+        <li><b>Rotación:</b> cada refresco reemplaza <code>refresh_token_hash</code> y actualiza <code>last_used_at</code> (vigencia deslizante). Reusar uno viejo = posible robo → <code>revoked_at</code>.</li>
+        <li><b>Cerrar sesión / revocar</b> (todos los dispositivos, cambio de contraseña) → <code>revoked_at</code>.</li>
+      </ol>
+      <p class="muted" style="margin-top:10px;">El access token se "mata" dejándolo caducar (por eso es corto).
+        Para revocación inmediata se usaría una lista de bloqueo por <code>jti</code>, pero nunca se almacena el token completo.</p>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'default', er: { useMaxWidth: true } });
+</script>
+</body>
+</html>

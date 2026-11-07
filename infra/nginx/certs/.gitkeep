@@ -1,0 +1,7 @@
+# Coloca aquí los certificados TLS de nginx: server.crt y server.key
+# Dev (autofirmado), desde la raíz del repo:
+#   openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+#     -keyout infra/nginx/certs/server.key \
+#     -out infra/nginx/certs/server.crt \
+#     -subj "/CN=localhost"
+# Los .crt/.key están ignorados por git (ver .gitignore).

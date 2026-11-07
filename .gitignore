@@ -1,0 +1,31 @@
+# === Node / NestJS ===
+**/node_modules/
+**/dist/
+**/.nest/
+*.tsbuildinfo
+
+# === Flutter / Dart ===
+**/.dart_tool/
+**/build/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.pub-cache/
+**/.pub/
+
+# === Entornos y secretos ===
+**/.env
+**/.env.*
+!**/.env.example
+
+# === Certificados TLS (dev) ===
+infra/nginx/certs/*.crt
+infra/nginx/certs/*.key
+
+# === Logs / sistema / editor ===
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+
+# Nota: .kiro/ (specs) e isy_mocks/ (prototipo) se versionan a propósito.

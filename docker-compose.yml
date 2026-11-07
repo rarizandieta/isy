@@ -1,0 +1,100 @@
+# Isy — Orquestación del ecosistema (esqueleto inicial)
+#
+# Reglas de la arquitectura:
+# - Único expuesto al host: nginx (443 y 80→443). El resto vive en la red privada.
+# - Único volumen: pgdata (la BD). Redis es efímero (sin volumen).
+# - Una base de datos por microservicio dentro de una sola instancia de Postgres.
+# - Cada microservicio es un proyecto independiente: su build context es su propia carpeta.
+#
+# NOTA DEV: las credenciales por defecto (isy/isy) son SOLO para desarrollo.
+# En producción usar variables de entorno / gestor de secretos.
+
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - gateway
+    networks: [isy-net]
+
+  gateway:
+    build:
+      context: ./backend/gateway
+      dockerfile: Dockerfile
+    environment:
+      PORT: "3000"
+      IDENTITY_URL: "http://identity:3001"
+      MINISTORES_URL: "http://ministores:3002"
+      REDIS_URL: "redis://redis:6379"
+      # JWT_PUBLIC_KEY: definir en prod (clave pública para validar access tokens)
+    depends_on:
+      - identity
+      - ministores
+      - redis
+    networks: [isy-net]
+
+  identity:
+    build:
+      context: ./backend/identity
+      dockerfile: Dockerfile
+    environment:
+      PORT: "3001"
+      DATABASE_URL: "postgres://isy:isy@postgres:5432/identity"
+      REDIS_URL: "redis://redis:6379"
+      # JWT_PRIVATE_KEY: definir en prod (clave privada para firmar access tokens)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [isy-net]
+
+  ministores:
+    build:
+      context: ./backend/ministores
+      dockerfile: Dockerfile
+    environment:
+      PORT: "3002"
+      DATABASE_URL: "postgres://isy:isy@postgres:5432/ministores"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [isy-net]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: isy
+      POSTGRES_PASSWORD: isy       # DEV ONLY — sustituir por secreto en prod
+      POSTGRES_DB: isy
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U isy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [isy-net]
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [isy-net]
+    # Sin volumen: estado efímero (rate-limit + blocklist de tokens).
+
+volumes:
+  pgdata:                          # único volumen de la plataforma
+
+networks:
+  isy-net:
+    driver: bridge

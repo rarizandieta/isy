@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>isi · BD — Mini Tiendas</title>
+<style>
+  :root { --seller:#6A1B9A; --accent:#EF6C00; --ink:#1b1b1f; --muted:#5b5b66; --line:#e3e3ea; --bg:#f7f7fb; --card:#fff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); line-height:1.5; }
+  header { background:linear-gradient(135deg,var(--seller),var(--accent)); color:#fff; padding:28px 24px; }
+  header h1 { margin:0 0 4px; font-size:24px; }
+  header p { margin:0; opacity:.9; font-size:14px; }
+  main { max-width:1040px; margin:0 auto; padding:24px; }
+  section { margin-bottom:30px; }
+  h2 { font-size:18px; margin:0 0 4px; border-left:4px solid var(--accent); padding-left:10px; }
+  .sub { color:var(--muted); font-size:13.5px; margin:0 0 14px 14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.04); margin-bottom:16px; overflow-x:auto; }
+  .legend { display:flex; gap:16px; flex-wrap:wrap; font-size:13px; color:var(--muted); }
+  .legend b { color:var(--ink); }
+  .mermaid { text-align:center; }
+  table { border-collapse:collapse; width:100%; font-size:13.5px; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { background:#fafafe; font-weight:600; }
+  tr:last-child td { border-bottom:none; }
+  code { background:#f0f0f6; padding:1px 6px; border-radius:6px; font-size:12.5px; }
+  .tbl-title { display:flex; align-items:center; gap:8px; margin:0 0 10px; font-size:16px; }
+  .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .pk { color:#b26a00; font-weight:700; }
+  .fk { color:#1565C0; font-weight:700; }
+  .u { color:var(--seller); font-weight:700; }
+  .ix { color:#2E7D32; font-weight:700; }
+  .muted { color:var(--muted); font-size:12.5px; }
+  .pill { display:inline-block; font-size:11px; background:#f3e9fb; color:#5b2d82; padding:2px 8px; border-radius:20px; margin:2px 2px 0 0; }
+  .ref { background:#fbf6ef; border:1px dashed #e5c9a3; }
+</style>
+</head>
+<body>
+<header>
+  <h1>isi · Base de datos — Mini Tiendas</h1>
+  <p>Ingeniería inversa del módulo Mini Tiendas + su relación con <code>profiles</code> · PostgreSQL</p>
+</header>
+
+<main>
+  <section>
+    <div class="legend card">
+      <span><b class="pk">PK</b> primaria</span>
+      <span><b class="fk">FK</b> foránea</span>
+      <span><b class="u">U</b> única</span>
+      <span><b class="ix">IX</b> índice</span>
+      <span class="muted">Todas las tablas llevan auditoría: created_at, created_by, updated_at, updated_by.</span>
+    </div>
+    <div class="card">
+      <b>Enumerados</b>
+      <div style="margin-top:6px">
+        <span class="pill">stock_status: available · sold_out · made_to_order</span>
+        <span class="pill">delivery_option: pickup · delivery · shipping</span>
+        <span class="pill">payment_method: cash · transfer · card</span>
+        <span class="pill">product_status: draft · published</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Diagrama ER</h2>
+    <p class="sub">Una Mini Tienda pertenece a un perfil vendedor (<code>profiles</code>). El detalle de <code>profiles</code> es del módulo Perfiles (pendiente); aquí solo se muestra la relación.</p>
+    <div class="card">
+      <pre class="mermaid">
+erDiagram
+    profiles ||--o| mini_stores : "perfil vendedor · tiene"
+    mini_stores ||--o{ store_sections : "organiza"
+    mini_stores ||--o{ store_products : "ofrece"
+    store_sections ||--o{ store_products : "agrupa (opcional)"
+
+    profiles { uuid id PK
+               profile_type type
+               uuid user_id FK }
+    mini_stores { uuid id PK
+                  uuid seller_profile_id FK
+                  varchar name
+                  varchar category
+                  text logo_url
+                  bool is_open }
+    store_sections { uuid id PK
+                     uuid store_id FK
+                     varchar name
+                     int position }
+    store_products { uuid id PK
+                     uuid store_id FK
+                     uuid section_id FK
+                     numeric price
+                     product_status status
+                     stock_status stock }
+      </pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>Tablas</h2>
+
+    <div class="card ref">
+      <p class="tbl-title"><span class="dot" style="background:var(--seller)"></span><b>profiles</b> <span class="muted">(referencia — módulo Perfiles)</span></p>
+      <p class="muted">No se define aquí; solo se usa como destino de la relación. La Mini Tienda apunta al <b>perfil vendedor</b> dueño mediante <code>seller_profile_id → profiles.id</code>.</p>
+    </div>
+
+    <div class="card">
+      <p class="tbl-title"><span class="dot" style="background:var(--accent)"></span><b>mini_stores</b></p>
+      <table>
+        <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
+        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>seller_profile_id</code></td><td>uuid</td><td><span class="fk">FK</span>→profiles <span class="u">U</span></td><td>no</td><td>Perfil vendedor dueño — una tienda por perfil</td></tr>
+        <tr><td><code>name</code></td><td>varchar(80)</td><td></td><td>no</td><td>Nombre de la tienda</td></tr>
+        <tr><td><code>tagline</code></td><td>varchar(120)</td><td></td><td>sí</td><td>Eslogan</td></tr>
+        <tr><td><code>description</code></td><td>text</td><td></td><td>sí</td><td></td></tr>
+        <tr><td><code>category</code></td><td>varchar(60)</td><td></td><td>no</td><td>Giro (abarrotes, comida…)</td></tr>
+        <tr><td><code>cover_url</code></td><td>text</td><td></td><td>sí</td><td>Foto de portada (banner; "biografía")</td></tr>
+        <tr><td><code>logo_url</code></td><td>text</td><td></td><td>sí</td><td>Foto de perfil (logo de la tienda)</td></tr>
+        <tr><td><code>accent_color</code></td><td>char(7)</td><td></td><td>no</td><td>Hex, ej. <code>#EF6C00</code></td></tr>
+        <tr><td><code>is_open</code></td><td>bool</td><td></td><td>no</td><td>Abierto/cerrado (default true)</td></tr>
+        <tr><td><code>schedule</code></td><td>varchar(120)</td><td></td><td>sí</td><td>Horario</td></tr>
+        <tr><td><code>zone</code></td><td>varchar(120)</td><td></td><td>sí</td><td>Zona / cobertura</td></tr>
+        <tr><td><code>delivery_options</code></td><td>delivery_option[]</td><td></td><td>no</td><td>Arreglo (pickup/delivery/shipping)</td></tr>
+        <tr><td><code>payment_methods</code></td><td>payment_method[]</td><td></td><td>no</td><td>Arreglo (cash/transfer/card)</td></tr>
+      </table>
+      <p class="muted">delivery/payments como arrays de enum (alternativa: tablas puente). + auditoría.</p>
+    </div>
+
+    <div class="card">
+      <p class="tbl-title"><span class="dot" style="background:var(--accent)"></span><b>store_sections</b></p>
+      <table>
+        <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
+        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>store_id</code></td><td>uuid</td><td><span class="fk">FK</span>→mini_stores <span class="ix">IX</span></td><td>no</td><td>ON DELETE CASCADE</td></tr>
+        <tr><td><code>name</code></td><td>varchar(60)</td><td></td><td>no</td><td>Ej. "Del día", "Bebidas"</td></tr>
+        <tr><td><code>position</code></td><td>int</td><td></td><td>no</td><td>Orden en la vitrina (reordenable)</td></tr>
+      </table>
+      <p class="muted">+ auditoría.</p>
+    </div>
+
+    <div class="card">
+      <p class="tbl-title"><span class="dot" style="background:var(--accent)"></span><b>store_products</b></p>
+      <table>
+        <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
+        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>store_id</code></td><td>uuid</td><td><span class="fk">FK</span>→mini_stores <span class="ix">IX</span></td><td>no</td><td>ON DELETE CASCADE</td></tr>
+        <tr><td><code>section_id</code></td><td>uuid</td><td><span class="fk">FK</span>→store_sections</td><td>sí</td><td>ON DELETE SET NULL (producto sin sección → "Otros")</td></tr>
+        <tr><td><code>name</code></td><td>varchar(100)</td><td></td><td>no</td><td></td></tr>
+        <tr><td><code>description</code></td><td>text</td><td></td><td>sí</td><td></td></tr>
+        <tr><td><code>price</code></td><td>numeric(12,2)</td><td></td><td>no</td><td></td></tr>
+        <tr><td><code>offer_price</code></td><td>numeric(12,2)</td><td></td><td>sí</td><td>CHECK &lt; price</td></tr>
+        <tr><td><code>unit</code></td><td>varchar(24)</td><td></td><td>no</td><td>pieza, kg, docena, manojo…</td></tr>
+        <tr><td><code>image_url</code></td><td>text</td><td></td><td>sí</td><td></td></tr>
+        <tr><td><code>stock</code></td><td>enum stock_status</td><td></td><td>no</td><td>available / sold_out / made_to_order</td></tr>
+        <tr><td><code>is_featured</code></td><td>bool</td><td></td><td>no</td><td>Destacado (default false)</td></tr>
+        <tr><td><code>status</code></td><td>enum product_status</td><td></td><td>no</td><td>Borrador o Publicado; publicado aparece también en el Feed de publicaciones (default draft)</td></tr>
+        <tr><td><code>published_at</code></td><td>timestamptz</td><td></td><td>sí</td><td>Momento en que se publicó</td></tr>
+        <tr><td><code>tags</code></td><td>text[]</td><td></td><td>sí</td><td>Etiquetas (alternativa: tabla puente)</td></tr>
+      </table>
+      <p class="muted">+ auditoría.</p>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'default', er: { useMaxWidth: true } });
+</script>
+</body>
+</html>
