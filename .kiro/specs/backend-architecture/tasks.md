@@ -32,10 +32,27 @@ flujo de auth mínimo. Cada tarea referencia los requisitos que cubre.
 
 - [ ] 4. Microservicio `ministores` (esqueleto)
   - [ ] 4.1 Crear `apps/ministores` (Nest HTTP) con `/health`
-  - [ ] 4.2 Conexión a la base `ministores` (ORM + migraciones) — tablas `mini_stores`,
-        `store_sections`, `store_products` (ver `db-mini-tiendas.html`)
-  - [ ] 4.3 Endpoints mínimos: `GET /stores/mine`, `GET /stores/:id`, `POST /stores`,
+  - [x] 4.2 Conexión a la base `ministores` (TypeORM + migraciones) — tablas `mini_stores`,
+        `store_sections`, `store_products`, catálogos y `audit_logs`
+  - [x] 4.3 Conexión adicional a base `media` (TypeORM + migraciones separadas) para
+        `media_assets`, variantes y logs de procesamiento
+  - [x] 4.4 Alinear campos de negocio a mockups/ER: imágenes y descripciones en categorías,
+        tags y secciones; precio permite `0`; `offer_price <= price`
+  - [x] 4.5 Definir puertos de almacenamiento (S3-compatible) y mantener binarios fuera de BD
+        (`optimized` por defecto + `thumbnail` + `hd`)
+  - [x] 4.7 Implementar upload local de media en dev (`/media/assets/upload`) con procesamiento
+        de variantes usando `sharp`
+  - [x] 4.6 Endpoints mínimos: `GET /stores/mine`, `GET /stores/:id`, `POST /stores`,
         CRUD básico de productos — autorizando por contexto de identidad
+  - [x] 4.8 Añadir endpoints de mantenimiento: `PATCH` y `DELETE` lógico para tiendas,
+        productos y secciones, con registro de cambios en `audit_logs`
+  - [x] 4.9 Añadir endpoints de catálogo (`categories`, `units`, `tags`) para consumo de app
+  - [x] 4.10 Añadir endpoints `with-image` para creación/actualización de tienda y producto
+        con control de variantes (`includeHd`)
+  - [x] 4.11 Añadir endpoints de mantenimiento para catálogos (`POST`/`PATCH` en
+        `categories`, `units`, `tags`) para habilitar altas y actualizaciones desde backoffice/app
+  - [x] 4.12 Exponer endpoint de consulta de `audit_logs` con filtros por entidad/acción/actor
+        para trazabilidad operativa
   - _Requisitos: R4_
 
 - [ ] 5. API Gateway (`apps/gateway`)
@@ -56,7 +73,8 @@ flujo de auth mínimo. Cada tarea referencia los requisitos que cubre.
 
 - [ ] 7. PostgreSQL
   - [ ] 7.1 Servicio `postgres` en compose con volumen `pgdata` y `healthcheck` (`pg_isready`)
-  - [ ] 7.2 `infra/postgres/init.sql`: crea bases `identity` y `ministores` (y roles por base)
+  - [ ] 7.2 `infra/postgres/init.sql`: crea bases `identity`, `ministores` y `media`
+        (y roles por base)
   - _Requisitos: R5, R6_
 
 - [ ] 8. nginx (borde / TLS 443)

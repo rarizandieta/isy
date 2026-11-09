@@ -63,6 +63,7 @@ services:
       dockerfile: Dockerfile
     environment:
       PORT: "3002"
+      MEDIA_DATABASE_URL: "postgres://isy:isy@postgres:5432/media"
       DATABASE_URL: "postgres://isy:isy@postgres:5432/ministores"
     depends_on:
       postgres:

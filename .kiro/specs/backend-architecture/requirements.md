@@ -17,9 +17,12 @@ autorización, usuarios y perfiles) y **Mini Tiendas**.
 - ✅ API Gateway (NestJS) como punto de entrada de la aplicación.
 - ✅ Microservicio **identity** (auth + authz + users + profiles).
 - ✅ Microservicio **ministores** (vitrina: tiendas, secciones, productos).
+- ✅ Base de datos **media** separada (metadata/variantes de imágenes) preparada para extraer
+  a microservicio dedicado sin romper contratos.
 - ✅ PostgreSQL con un volumen; aislamiento lógico por servicio.
 - ✅ **Redis** (en memoria, **sin volumen**) para rate-limiting y blocklist de access tokens.
-- ❌ Lógica de negocio completa, feed/chat/notificaciones, media/uploads (fases siguientes).
+- ❌ Lógica de negocio completa, feed/chat/notificaciones y procesamiento avanzado de media
+  (fases siguientes).
 
 ---
 
@@ -86,6 +89,10 @@ independiente de la identidad.
    identity), sin llaves foráneas entre bases de datos de distintos servicios.
 3. EL SERVICIO DEBERÁ validar que el solicitante es dueño del perfil vendedor antes de
    permitir operaciones de escritura (según el contexto de identidad del gateway).
+4. EL SERVICIO DEBERÁ incluir trazabilidad de cambios de negocio (`audit_logs`) para
+   operaciones de tienda, secciones y productos.
+5. EL SERVICIO DEBERÁ permitir artículos con `price = 0` y validar que `offer_price` no
+   sea mayor al precio base.
 
 ---
 
@@ -98,9 +105,30 @@ ligero y reproducible.
 1. EL SISTEMA DEBERÁ usar **una** instancia de PostgreSQL con **un único volumen** para los
    datos.
 2. EL SISTEMA DEBERÁ aislar lógicamente los datos **por servicio** (una base de datos por
-   microservicio dentro de la misma instancia: `identity`, `ministores`).
+   microservicio dentro de la misma instancia: `identity`, `ministores`, `media`).
 3. CADA microservicio DEBERÁ conectarse únicamente a su propia base de datos.
 4. LOS demás artefactos (gateway, servicios, nginx) DEBERÁN ser **sin estado** (sin volumen).
+
+---
+
+## Requisito 13 — Gestión de media (fase inicial integrada en ministores)
+
+**Historia:** Como equipo, queremos almacenar imágenes de forma escalable, para evitar cargar
+PostgreSQL con binarios y preparar una separación futura hacia un microservicio de media.
+
+**Criterios de aceptación:**
+1. EL SISTEMA DEBERÁ almacenar archivos de imagen fuera de PostgreSQL (storage S3-compatible
+   en dev/prod), guardando en BD únicamente metadatos y referencias.
+2. LA BASE `media` DEBERÁ modelar assets y variantes (`optimized`, `thumbnail`, `hd`) con
+   `optimized` como modo por defecto.
+3. EL SISTEMA DEBERÁ permitir que el usuario opte por `hd` sin reemplazar la variante
+   optimizada usada por defecto en listados.
+4. EL DISEÑO DEBERÁ permitir extraer la gestión de media a un microservicio dedicado en una
+   fase futura sin cambiar contratos de dominio de mini tiendas.
+5. EN desarrollo, EL SISTEMA DEBERÁ soportar almacenamiento local de archivos con exposición
+   estática controlada para pruebas de API.
+6. EL PROCESAMIENTO de imágenes DEBERÁ generar variantes `optimized` y `thumbnail` automáticamente
+   en el upload, y `hd` de forma opcional.
 
 ---
 
