@@ -1,0 +1,30 @@
+# Isy — Override de DESARROLLO (no usar en producción)
+#
+# Docker Compose carga este archivo automáticamente y lo fusiona con
+# docker-compose.yml. Su propósito es habilitar utilidades y accesos SOLO para
+# desarrollo:
+#   - publicar el puerto de identity al host (probar la app directamente), y
+#   - levantar Adminer para inspeccionar la base de datos.
+#
+# Regla de arquitectura (producción): el único expuesto al host es nginx (443).
+# Por eso todo esto vive aquí, en un override de dev, y NO en el compose
+# principal.
+
+services:
+  identity:
+    ports:
+      - "3001:3001" # host -> contenedor. Emulador Android: http://10.0.2.2:3001
+
+  # Adminer: cliente web para inspeccionar Postgres (solo dev).
+  # Se conecta a la instancia de Postgres por la red interna (host "postgres"),
+  # así que NO hace falta publicar el 5432 al host.
+  adminer:
+    image: adminer:4.8.1
+    restart: unless-stopped
+    ports:
+      - "8080:8080" # UI web en http://localhost:8080
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres # pre-rellena el campo "Servidor"
+    depends_on:
+      - postgres
+    networks: [isy-net]

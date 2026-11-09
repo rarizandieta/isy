@@ -48,6 +48,7 @@
       <span><b class="fk">FK</b> foránea</span>
       <span><b class="u">U</b> única</span>
       <span><b class="ix">IX</b> índice</span>
+      <span class="muted">IDs: <code>serial</code> (entero autoincrementable; secuencia por tabla). FKs: <code>integer</code>.</span>
       <span class="muted">Todas las tablas llevan auditoría: created_at, created_by, updated_at, updated_by.</span>
     </div>
     <div class="card">
@@ -72,22 +73,22 @@ erDiagram
     mini_stores ||--o{ store_products : "ofrece"
     store_sections ||--o{ store_products : "agrupa (opcional)"
 
-    profiles { uuid id PK
+    profiles { serial id PK
                profile_type type
-               uuid user_id FK }
-    mini_stores { uuid id PK
-                  uuid seller_profile_id FK
+               integer user_id FK }
+    mini_stores { serial id PK
+                  integer seller_profile_id FK
                   varchar name
                   varchar category
                   text logo_url
                   bool is_open }
-    store_sections { uuid id PK
-                     uuid store_id FK
+    store_sections { serial id PK
+                     integer store_id FK
                      varchar name
                      int position }
-    store_products { uuid id PK
-                     uuid store_id FK
-                     uuid section_id FK
+    store_products { serial id PK
+                     integer store_id FK
+                     integer section_id FK
                      numeric price
                      product_status status
                      stock_status stock }
@@ -107,8 +108,8 @@ erDiagram
       <p class="tbl-title"><span class="dot" style="background:var(--accent)"></span><b>mini_stores</b></p>
       <table>
         <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
-        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
-        <tr><td><code>seller_profile_id</code></td><td>uuid</td><td><span class="fk">FK</span>→profiles <span class="u">U</span></td><td>no</td><td>Perfil vendedor dueño — una tienda por perfil</td></tr>
+        <tr><td><code>id</code></td><td>serial</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>seller_profile_id</code></td><td>integer</td><td><span class="fk">FK</span>→profiles <span class="u">U</span></td><td>no</td><td>Perfil vendedor dueño — una tienda por perfil</td></tr>
         <tr><td><code>name</code></td><td>varchar(80)</td><td></td><td>no</td><td>Nombre de la tienda</td></tr>
         <tr><td><code>tagline</code></td><td>varchar(120)</td><td></td><td>sí</td><td>Eslogan</td></tr>
         <tr><td><code>description</code></td><td>text</td><td></td><td>sí</td><td></td></tr>
@@ -129,8 +130,8 @@ erDiagram
       <p class="tbl-title"><span class="dot" style="background:var(--accent)"></span><b>store_sections</b></p>
       <table>
         <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
-        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
-        <tr><td><code>store_id</code></td><td>uuid</td><td><span class="fk">FK</span>→mini_stores <span class="ix">IX</span></td><td>no</td><td>ON DELETE CASCADE</td></tr>
+        <tr><td><code>id</code></td><td>serial</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>store_id</code></td><td>integer</td><td><span class="fk">FK</span>→mini_stores <span class="ix">IX</span></td><td>no</td><td>ON DELETE CASCADE</td></tr>
         <tr><td><code>name</code></td><td>varchar(60)</td><td></td><td>no</td><td>Ej. "Del día", "Bebidas"</td></tr>
         <tr><td><code>position</code></td><td>int</td><td></td><td>no</td><td>Orden en la vitrina (reordenable)</td></tr>
       </table>
@@ -141,9 +142,9 @@ erDiagram
       <p class="tbl-title"><span class="dot" style="background:var(--accent)"></span><b>store_products</b></p>
       <table>
         <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
-        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
-        <tr><td><code>store_id</code></td><td>uuid</td><td><span class="fk">FK</span>→mini_stores <span class="ix">IX</span></td><td>no</td><td>ON DELETE CASCADE</td></tr>
-        <tr><td><code>section_id</code></td><td>uuid</td><td><span class="fk">FK</span>→store_sections</td><td>sí</td><td>ON DELETE SET NULL (producto sin sección → "Otros")</td></tr>
+        <tr><td><code>id</code></td><td>serial</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>store_id</code></td><td>integer</td><td><span class="fk">FK</span>→mini_stores <span class="ix">IX</span></td><td>no</td><td>ON DELETE CASCADE</td></tr>
+        <tr><td><code>section_id</code></td><td>integer</td><td><span class="fk">FK</span>→store_sections</td><td>sí</td><td>ON DELETE SET NULL (producto sin sección → "Otros")</td></tr>
         <tr><td><code>name</code></td><td>varchar(100)</td><td></td><td>no</td><td></td></tr>
         <tr><td><code>description</code></td><td>text</td><td></td><td>sí</td><td></td></tr>
         <tr><td><code>price</code></td><td>numeric(12,2)</td><td></td><td>no</td><td></td></tr>

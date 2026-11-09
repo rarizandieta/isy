@@ -5,10 +5,10 @@ Ingeniería inversa de los mocks, **módulo por módulo**, para una BD **relacio
 su estructura y cómo se relacionan (sin scripts de creación).
 
 > **Convenciones**
-> - Llaves primarias `uuid`.
+> - Llaves primarias `serial` (entero autoincrementable; una secuencia por tabla `<tabla>_id_seq`).
 > - Fechas en `timestamptz` (UTC).
 > - **Auditoría en TODAS las tablas:** `created_at`, `created_by`, `updated_at`, `updated_by`.
->   Los `*_at` son `timestamptz`; los `*_by` son `uuid → users(id)` (nulos si la acción la hace el sistema).
+>   Los `*_at` son `timestamptz`; los `*_by` son `integer → users(id)` (nulos si la acción la hace el sistema).
 > - Correos como `citext` (sin distinción de mayúsculas).
 > - Secretos (contraseñas, códigos OTP, tokens) se guardan **hasheados**, nunca en claro.
 > - Leyenda de llaves: **PK** primaria · **FK** foránea · **U** única · **IX** índice.
@@ -42,9 +42,11 @@ erDiagram
     users ||--o{ email_verification_codes : "códigos OTP"
     users ||--o{ password_reset_tokens    : "reseteos de clave"
     users ||--o{ user_sessions            : "sesiones activas"
+    users ||--o{ user_roles               : "tiene roles"
+    roles ||--o{ user_roles               : "asignado a"
 
     users {
-        uuid        id PK
+        serial      id PK
         varchar     full_name
         citext      email "U"
         user_status status
@@ -52,16 +54,16 @@ erDiagram
         timestamptz last_login_at
     }
     auth_identities {
-        uuid          id PK
-        uuid          user_id FK
+        serial        id PK
+        integer       user_id FK
         auth_provider provider
         varchar       provider_uid
         text          password_hash
         citext        email
     }
     email_verification_codes {
-        uuid        id PK
-        uuid        user_id FK
+        serial      id PK
+        integer     user_id FK
         text        code_hash
         citext      destination
         smallint    attempts
@@ -69,18 +71,28 @@ erDiagram
         timestamptz consumed_at
     }
     password_reset_tokens {
-        uuid        id PK
-        uuid        user_id FK
+        serial      id PK
+        integer     user_id FK
         text        token_hash
         timestamptz expires_at
         timestamptz consumed_at
     }
     user_sessions {
-        uuid        id PK
-        uuid        user_id FK
+        serial      id PK
+        integer     user_id FK
         text        refresh_token_hash
         timestamptz expires_at
         timestamptz revoked_at
+    }
+    roles {
+        serial  id PK
+        varchar code UK
+        varchar name
+    }
+    user_roles {
+        serial  id PK
+        integer user_id FK
+        integer role_id FK
     }
 ```
 
@@ -92,7 +104,7 @@ erDiagram
 #### `users` — cuenta raíz (la persona)
 | Columna | Tipo | Llave | Nulo | Descripción |
 |---|---|---|---|---|
-| id | uuid | PK | no | Identificador de la cuenta |
+| id | serial | PK | no | Identificador de la cuenta |
 | full_name | varchar(120) | | no | Campo **Nombre** del registro |
 | email | citext | U | no | Campo **Correo**; único, sin distinción de mayúsculas |
 | avatar_url | text | | sí | Avatar opcional |
@@ -100,9 +112,9 @@ erDiagram
 | email_verified_at | timestamptz | | sí | Momento en que se verificó el correo |
 | last_login_at | timestamptz | | sí | Se actualiza en cada login |
 | created_at | timestamptz | | no | Fecha de creación |
-| created_by | uuid | FK→`users` | sí | Quién creó el registro |
+| created_by | integer | FK→`users` | sí | Quién creó el registro |
 | updated_at | timestamptz | | no | Fecha de última modificación |
-| updated_by | uuid | FK→`users` | sí | Quién modificó por última vez |
+| updated_by | integer | FK→`users` | sí | Quién modificó por última vez |
 
 > `user_status`: `pending_verification` · `active` · `suspended` · `deleted`
 > Futuro (módulo Perfiles): `last_active_profile_id → profiles(id)` para recordar el último
@@ -111,16 +123,16 @@ erDiagram
 #### `auth_identities` — métodos de acceso (contraseña + SSO)
 | Columna | Tipo | Llave | Nulo | Descripción |
 |---|---|---|---|---|
-| id | uuid | PK | no | |
-| user_id | uuid | FK→`users`, IX | no | Dueño de la identidad (borrado en cascada) |
+| id | serial | PK | no | |
+| user_id | integer | FK→`users`, IX | no | Dueño de la identidad (borrado en cascada) |
 | provider | enum `auth_provider` | U(user_id,provider) | no | `password` · `google` · `apple` |
 | provider_uid | varchar(255) | U(provider,provider_uid) | sí | `sub`/ID del proveedor SSO; **null** en contraseña |
 | password_hash | text | | sí | bcrypt/argon2; **solo** en `password` |
 | email | citext | | sí | Correo que devuelve el proveedor |
 | created_at | timestamptz | | no | Fecha de creación |
-| created_by | uuid | FK→`users` | sí | Quién creó el registro |
+| created_by | integer | FK→`users` | sí | Quién creó el registro |
 | updated_at | timestamptz | | no | Fecha de última modificación |
-| updated_by | uuid | FK→`users` | sí | Quién modificó por última vez |
+| updated_by | integer | FK→`users` | sí | Quién modificó por última vez |
 
 > **Reglas:** máx. un método por proveedor por usuario (`U(user_id, provider)`); una identidad
 > SSO no se comparte entre cuentas (`U(provider, provider_uid)`). Una fila `password` lleva
@@ -129,8 +141,8 @@ erDiagram
 #### `email_verification_codes` — códigos OTP (pantalla de verificación)
 | Columna | Tipo | Llave | Nulo | Descripción |
 |---|---|---|---|---|
-| id | uuid | PK | no | |
-| user_id | uuid | FK→`users`, IX | no | A quién pertenece el código |
+| id | serial | PK | no | |
+| user_id | integer | FK→`users`, IX | no | A quién pertenece el código |
 | purpose | enum `verification_purpose` | | no | `signup` (default), `login`, `email_change` |
 | code_hash | text | | no | **Hash** del código de 6 dígitos (nunca en claro) |
 | destination | citext | | no | Correo al que se envió |
@@ -139,9 +151,9 @@ erDiagram
 | expires_at | timestamptz | | no | **created_at + 15 min** (es el contador de la UI) |
 | consumed_at | timestamptz | | sí | Al verificar o al invalidar por reenvío |
 | created_at | timestamptz | | no | Fecha de creación |
-| created_by | uuid | FK→`users` | sí | Quién creó el registro |
+| created_by | integer | FK→`users` | sí | Quién creó el registro |
 | updated_at | timestamptz | | no | Fecha de última modificación |
-| updated_by | uuid | FK→`users` | sí | Quién modificó por última vez |
+| updated_by | integer | FK→`users` | sí | Quién modificó por última vez |
 
 > **Un solo código vivo** por `user_id`+`purpose` (índice único parcial sobre
 > `consumed_at IS NULL`): al **solicitar de nuevo**, el código anterior se marca consumido y se
@@ -150,21 +162,21 @@ erDiagram
 #### `password_reset_tokens` — recuperación de contraseña
 | Columna | Tipo | Llave | Nulo | Descripción |
 |---|---|---|---|---|
-| id | uuid | PK | no | |
-| user_id | uuid | FK→`users`, IX | no | |
+| id | serial | PK | no | |
+| user_id | integer | FK→`users`, IX | no | |
 | token_hash | text | U | no | Hash del token enviado por correo |
 | expires_at | timestamptz | | no | Vigencia corta (p. ej. 1 h) |
 | consumed_at | timestamptz | | sí | Al usarse |
 | created_at | timestamptz | | no | Fecha de creación |
-| created_by | uuid | FK→`users` | sí | Quién creó el registro |
+| created_by | integer | FK→`users` | sí | Quién creó el registro |
 | updated_at | timestamptz | | no | Fecha de última modificación |
-| updated_by | uuid | FK→`users` | sí | Quién modificó por última vez |
+| updated_by | integer | FK→`users` | sí | Quién modificó por última vez |
 
 #### `user_sessions` — sesiones / "seguir conectado"
 | Columna | Tipo | Llave | Nulo | Descripción |
 |---|---|---|---|---|
-| id | uuid | PK | no | |
-| user_id | uuid | FK→`users`, IX | no | |
+| id | serial | PK | no | |
+| user_id | integer | FK→`users`, IX | no | |
 | refresh_token_hash | text | U | no | Hash del refresh token |
 | user_agent | text | | sí | Dispositivo/navegador |
 | ip_address | inet | | sí | IP de origen |
@@ -172,9 +184,33 @@ erDiagram
 | expires_at | timestamptz | | no | Caducidad (p. ej. 30 días) |
 | revoked_at | timestamptz | | sí | Cierre de sesión / revocación |
 | created_at | timestamptz | | no | Fecha de creación |
-| created_by | uuid | FK→`users` | sí | Quién creó el registro |
+| created_by | integer | FK→`users` | sí | Quién creó el registro |
 | updated_at | timestamptz | | no | Fecha de última modificación |
-| updated_by | uuid | FK→`users` | sí | Quién modificó por última vez |
+| updated_by | integer | FK→`users` | sí | Quién modificó por última vez |
+
+#### `roles` — catálogo de roles de plataforma
+| Columna | Tipo | Llave | Nulo | Descripción |
+|---|---|---|---|---|
+| id | serial | PK | no | |
+| code | varchar(32) | U | no | `admin` · `buyer` · `seller` · `service_provider` |
+| name | varchar(60) | | no | Nombre legible |
+| description | text | | sí | |
+| created_at/by, updated_at/by | — | | | Auditoría |
+
+> Catálogo sembrado con 4 roles.
+
+#### `user_roles` — roles por usuario (N:M)
+| Columna | Tipo | Llave | Nulo | Descripción |
+|---|---|---|---|---|
+| id | serial | PK | no | |
+| user_id | integer | FK→`users`, IX | no | ON DELETE CASCADE |
+| role_id | integer | FK→`roles`, IX | no | |
+| created_at/by, updated_at/by | — | | | Auditoría (`created_by` = quién asignó el rol) |
+
+> `U(user_id, role_id)`: un rol no se repite por usuario. **Roles vs Perfiles:** el rol es la
+> *capacidad/autorización* (incluye `admin`, sin perfil); el perfil es la *instancia* del
+> marketplace. Al registrarse el usuario nace con el rol `buyer`; al crear un perfil
+> vendedor/servicios se agrega `seller`/`service_provider`; `admin` se otorga manualmente.
 
 ### 1.4 Mapeo pantalla → columna
 
@@ -187,6 +223,7 @@ erDiagram
 | Confirmar contraseña | no se persiste (validación de cliente) |
 | Continuar con Apple | `auth_identities(provider='apple', provider_uid, email)` |
 | Continuar con Google | `auth_identities(provider='google', provider_uid, email)` |
+| Rol por defecto (al registrarse) | `user_roles` → rol `buyer` |
 
 **Verificación OTP**
 | Elemento UI | Destino |
@@ -286,8 +323,8 @@ store_sections              1 ──── *     store_products   (section_id, o
 #### `mini_stores`
 | Columna | Tipo | Llave | Nulo | Descripción |
 |---|---|---|---|---|
-| id | uuid | PK | no | |
-| seller_profile_id | uuid | FK→`profiles`, U | no | Una tienda por perfil vendedor |
+| id | serial | PK | no | |
+| seller_profile_id | integer | FK→`profiles`, U | no | Una tienda por perfil vendedor |
 | name | varchar(80) | | no | |
 | tagline | varchar(120) | | sí | Eslogan |
 | description | text | | sí | |
@@ -306,8 +343,8 @@ store_sections              1 ──── *     store_products   (section_id, o
 #### `store_sections`
 | Columna | Tipo | Llave | Nulo | Descripción |
 |---|---|---|---|---|
-| id | uuid | PK | no | |
-| store_id | uuid | FK→`mini_stores`, IX | no | ON DELETE CASCADE |
+| id | serial | PK | no | |
+| store_id | integer | FK→`mini_stores`, IX | no | ON DELETE CASCADE |
 | name | varchar(60) | | no | Ej. "Del día", "Bebidas" |
 | position | int | | no | Orden en la vitrina (reordenable) |
 
@@ -316,9 +353,9 @@ store_sections              1 ──── *     store_products   (section_id, o
 #### `store_products`
 | Columna | Tipo | Llave | Nulo | Descripción |
 |---|---|---|---|---|
-| id | uuid | PK | no | |
-| store_id | uuid | FK→`mini_stores`, IX | no | ON DELETE CASCADE |
-| section_id | uuid | FK→`store_sections` | sí | ON DELETE SET NULL |
+| id | serial | PK | no | |
+| store_id | integer | FK→`mini_stores`, IX | no | ON DELETE CASCADE |
+| section_id | integer | FK→`store_sections` | sí | ON DELETE SET NULL |
 | name | varchar(100) | | no | |
 | description | text | | sí | |
 | price | numeric(12,2) | | no | |

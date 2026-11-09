@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Configuración de seguridad de red SOLO para builds de DEBUG.
+
+  Para el backend de desarrollo (localhost / 10.0.2.2 / 127.0.0.1):
+    - cleartextTrafficPermitted=true  -> permite HTTP directo (p. ej. acceso
+      directo a identity en :3001 por adb reverse) como respaldo.
+    - trust-anchors -> confía en el certificado AUTOFIRMADO de dev
+      (res/raw/isy_dev_ca.crt) para que el HTTPS por el borde (nginx 443) valide,
+      además de las CAs del sistema.
+
+  Este archivo NO se incluye en el build de release. En release la app exige
+  HTTPS con CA pública (y, más adelante, SSL pinning). El certificado dev que
+  aquí se confía solo aplica a estos dominios locales.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <trust-anchors>
+            <certificates src="@raw/isy_dev_ca"/>
+            <certificates src="system"/>
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

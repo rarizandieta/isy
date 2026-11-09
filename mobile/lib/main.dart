@@ -1,21 +1,10 @@
 import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const IsyApp());
-}
+import 'app.dart';
+import 'core/http_client_factory.dart';
 
-class IsyApp extends StatelessWidget {
-  const IsyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Isy',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true),
-      home: const Scaffold(
-        body: Center(child: Text('Isy')),
-      ),
-    );
-  }
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final httpClient = await buildHttpClient();
+  runApp(IsyApp(httpClient: httpClient));
 }

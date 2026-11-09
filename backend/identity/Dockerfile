@@ -24,6 +24,9 @@ WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./package.json
+# Drizzle SQL migrations are read at runtime by the programmatic migrator
+# (drizzle-orm/node-postgres/migrator). drizzle-kit is NOT needed at runtime.
+COPY --from=builder /app/drizzle ./drizzle
 
 EXPOSE 3001
 CMD ["node", "dist/main.js"]

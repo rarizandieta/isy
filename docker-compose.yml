@@ -46,7 +46,10 @@ services:
       PORT: "3001"
       DATABASE_URL: "postgres://isy:isy@postgres:5432/identity"
       REDIS_URL: "redis://redis:6379"
-      # JWT_PRIVATE_KEY: definir en prod (clave privada para firmar access tokens)
+      JWT_SECRET: "dev-secret-change-me"   # DEV ONLY (HS256); migrar a RS256 con el gateway
+      ACCESS_TTL: "900"                     # access token: 15 min
+      REFRESH_TTL: "2592000"                # refresh token: 30 días
+      # JWT_PRIVATE_KEY/PUBLIC_KEY: en prod, RS256 (identity firma, gateway valida)
     depends_on:
       postgres:
         condition: service_healthy

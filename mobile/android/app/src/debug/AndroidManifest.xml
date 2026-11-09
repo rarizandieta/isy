@@ -4,4 +4,10 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Solo DEBUG: habilita tráfico en claro acotado al backend local
+         (ver res/xml/network_security_config.xml). En release la app exige
+         HTTPS; este override no se incluye en ese build. -->
+    <application
+        android:networkSecurityConfig="@xml/network_security_config" />
 </manifest>

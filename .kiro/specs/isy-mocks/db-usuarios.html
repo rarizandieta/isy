@@ -62,7 +62,7 @@
 <body>
 <header>
   <h1>isi · Base de datos</h1>
-  <p>Módulo 1 — Usuarios y Autenticación · Ingeniería inversa de Registro, OTP y Login · PostgreSQL</p>
+  <p>Módulo 1 — Usuarios y Autenticación · Registro, OTP, Login y Roles · PostgreSQL</p>
 </header>
 
 <main>
@@ -72,6 +72,7 @@
       <span><b class="fk">FK</b> llave foránea</span>
       <span><b class="u">U</b> única</span>
       <span><b class="ix">IX</b> índice</span>
+      <span class="muted">IDs: <code>serial</code> (entero autoincrementable; una secuencia por tabla, <code>&lt;tabla&gt;_id_seq</code>). FKs y <code>*_by</code>: <code>integer</code>.</span>
       <span class="muted">Secretos (contraseña, OTP, tokens) se guardan <b>hasheados</b>.</span>
       <span class="muted">Auditoría en <b>todas</b> las tablas: <code>created_at</code>, <code>created_by</code>, <code>updated_at</code>, <code>updated_by</code> (<code>*_by → users.id</code>).</span>
     </div>
@@ -86,9 +87,11 @@ erDiagram
     users ||--o{ email_verification_codes : "códigos OTP"
     users ||--o{ password_reset_tokens    : "reseteos de clave"
     users ||--o{ user_sessions            : "sesiones activas"
+    users ||--o{ user_roles               : "tiene roles"
+    roles ||--o{ user_roles               : "asignado a"
 
     users {
-        uuid        id PK
+        serial      id PK
         varchar     full_name
         citext      email UK
         user_status status
@@ -96,16 +99,16 @@ erDiagram
         timestamptz last_login_at
     }
     auth_identities {
-        uuid          id PK
-        uuid          user_id FK
+        serial        id PK
+        integer       user_id FK
         auth_provider provider
         varchar       provider_uid
         text          password_hash
         citext        email
     }
     email_verification_codes {
-        uuid        id PK
-        uuid        user_id FK
+        serial      id PK
+        integer     user_id FK
         text        code_hash
         citext      destination
         smallint    attempts
@@ -113,18 +116,28 @@ erDiagram
         timestamptz consumed_at
     }
     password_reset_tokens {
-        uuid        id PK
-        uuid        user_id FK
+        serial      id PK
+        integer     user_id FK
         text        token_hash
         timestamptz expires_at
         timestamptz consumed_at
     }
     user_sessions {
-        uuid        id PK
-        uuid        user_id FK
+        serial      id PK
+        integer     user_id FK
         text        refresh_token_hash
         timestamptz expires_at
         timestamptz revoked_at
+    }
+    roles {
+        serial  id PK
+        varchar code UK
+        varchar name
+    }
+    user_roles {
+        serial  id PK
+        integer user_id FK
+        integer role_id FK
     }
       </pre>
     </div>
@@ -140,7 +153,7 @@ erDiagram
       <p class="tbl-title"><span class="dot" style="background:var(--service)"></span><b>users</b> — cuenta raíz (la persona)</p>
       <table>
         <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
-        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td>Identificador de la cuenta</td></tr>
+        <tr><td><code>id</code></td><td>serial</td><td><span class="pk">PK</span></td><td>no</td><td>Identificador de la cuenta</td></tr>
         <tr><td><code>full_name</code></td><td>varchar(120)</td><td></td><td>no</td><td>Campo <b>Nombre</b> del registro</td></tr>
         <tr><td><code>email</code></td><td>citext</td><td><span class="u">U</span></td><td>no</td><td>Campo <b>Correo</b>; único, sin distinción de mayúsculas</td></tr>
         <tr><td><code>avatar_url</code></td><td>text</td><td></td><td>sí</td><td>Avatar opcional</td></tr>
@@ -148,9 +161,9 @@ erDiagram
         <tr><td><code>email_verified_at</code></td><td>timestamptz</td><td></td><td>sí</td><td>Momento en que se verificó el correo</td></tr>
         <tr><td><code>last_login_at</code></td><td>timestamptz</td><td></td><td>sí</td><td>Se actualiza en cada login</td></tr>
         <tr><td><code>created_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de creación</td></tr>
-        <tr><td><code>created_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
+        <tr><td><code>created_by</code></td><td>integer</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
         <tr><td><code>updated_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de última modificación</td></tr>
-        <tr><td><code>updated_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
+        <tr><td><code>updated_by</code></td><td>integer</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
       </table>
       <p class="muted">user_status: <code>pending_verification</code> · <code>active</code> · <code>suspended</code> · <code>deleted</code>.
         Futuro: <code>last_active_profile_id → profiles(id)</code> (módulo Perfiles).</p>
@@ -160,16 +173,16 @@ erDiagram
       <p class="tbl-title"><span class="dot" style="background:var(--seller)"></span><b>auth_identities</b> — métodos de acceso (contraseña + SSO)</p>
       <table>
         <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
-        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
-        <tr><td><code>user_id</code></td><td>uuid</td><td><span class="fk">FK</span> <span class="ix">IX</span></td><td>no</td><td>Dueño (borrado en cascada)</td></tr>
+        <tr><td><code>id</code></td><td>serial</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>user_id</code></td><td>integer</td><td><span class="fk">FK</span> <span class="ix">IX</span></td><td>no</td><td>Dueño (borrado en cascada)</td></tr>
         <tr><td><code>provider</code></td><td>enum auth_provider</td><td><span class="u">U</span>(user_id,provider)</td><td>no</td><td><code>password</code> · <code>google</code> · <code>apple</code></td></tr>
         <tr><td><code>provider_uid</code></td><td>varchar(255)</td><td><span class="u">U</span>(provider,uid)</td><td>sí</td><td>ID del proveedor SSO; <b>null</b> en contraseña</td></tr>
         <tr><td><code>password_hash</code></td><td>text</td><td></td><td>sí</td><td>bcrypt/argon2; <b>solo</b> en <code>password</code></td></tr>
         <tr><td><code>email</code></td><td>citext</td><td></td><td>sí</td><td>Correo que devuelve el proveedor</td></tr>
         <tr><td><code>created_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de creación</td></tr>
-        <tr><td><code>created_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
+        <tr><td><code>created_by</code></td><td>integer</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
         <tr><td><code>updated_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de última modificación</td></tr>
-        <tr><td><code>updated_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
+        <tr><td><code>updated_by</code></td><td>integer</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
       </table>
       <p class="muted">Máx. un método por proveedor por usuario; una identidad SSO no se comparte.
         Fila <code>password</code> → lleva hash, sin uid; fila SSO → lleva uid, sin hash.</p>
@@ -179,8 +192,8 @@ erDiagram
       <p class="tbl-title"><span class="dot" style="background:var(--buyer)"></span><b>email_verification_codes</b> — códigos OTP</p>
       <table>
         <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
-        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
-        <tr><td><code>user_id</code></td><td>uuid</td><td><span class="fk">FK</span> <span class="ix">IX</span></td><td>no</td><td>A quién pertenece el código</td></tr>
+        <tr><td><code>id</code></td><td>serial</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>user_id</code></td><td>integer</td><td><span class="fk">FK</span> <span class="ix">IX</span></td><td>no</td><td>A quién pertenece el código</td></tr>
         <tr><td><code>purpose</code></td><td>enum verification_purpose</td><td></td><td>no</td><td><code>signup</code> (default), <code>login</code>, <code>email_change</code></td></tr>
         <tr><td><code>code_hash</code></td><td>text</td><td></td><td>no</td><td><b>Hash</b> del código de 6 dígitos</td></tr>
         <tr><td><code>destination</code></td><td>citext</td><td></td><td>no</td><td>Correo al que se envió</td></tr>
@@ -188,9 +201,9 @@ erDiagram
         <tr><td><code>expires_at</code></td><td>timestamptz</td><td></td><td>no</td><td><b>created_at + 15 min</b> (contador de la UI)</td></tr>
         <tr><td><code>consumed_at</code></td><td>timestamptz</td><td></td><td>sí</td><td>Al verificar o invalidar por reenvío</td></tr>
         <tr><td><code>created_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de creación</td></tr>
-        <tr><td><code>created_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
+        <tr><td><code>created_by</code></td><td>integer</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
         <tr><td><code>updated_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de última modificación</td></tr>
-        <tr><td><code>updated_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
+        <tr><td><code>updated_by</code></td><td>integer</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
       </table>
       <p class="muted">Un solo código vivo por usuario+propósito: al <b>solicitar de nuevo</b> se
         consume el anterior y se inserta uno nuevo (reinicia los 15 min).</p>
@@ -200,15 +213,15 @@ erDiagram
       <p class="tbl-title"><span class="dot" style="background:#b26a00"></span><b>password_reset_tokens</b> — recuperación de contraseña</p>
       <table>
         <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
-        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
-        <tr><td><code>user_id</code></td><td>uuid</td><td><span class="fk">FK</span> <span class="ix">IX</span></td><td>no</td><td></td></tr>
+        <tr><td><code>id</code></td><td>serial</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>user_id</code></td><td>integer</td><td><span class="fk">FK</span> <span class="ix">IX</span></td><td>no</td><td></td></tr>
         <tr><td><code>token_hash</code></td><td>text</td><td><span class="u">U</span></td><td>no</td><td>Hash del token enviado por correo</td></tr>
         <tr><td><code>expires_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Vigencia corta (p. ej. 1 h)</td></tr>
         <tr><td><code>consumed_at</code></td><td>timestamptz</td><td></td><td>sí</td><td>Al usarse</td></tr>
         <tr><td><code>created_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de creación</td></tr>
-        <tr><td><code>created_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
+        <tr><td><code>created_by</code></td><td>integer</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
         <tr><td><code>updated_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de última modificación</td></tr>
-        <tr><td><code>updated_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
+        <tr><td><code>updated_by</code></td><td>integer</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
       </table>
     </div>
 
@@ -216,8 +229,8 @@ erDiagram
       <p class="tbl-title"><span class="dot" style="background:#607d8b"></span><b>user_sessions</b> — sesiones / "seguir conectado"</p>
       <table>
         <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
-        <tr><td><code>id</code></td><td>uuid</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
-        <tr><td><code>user_id</code></td><td>uuid</td><td><span class="fk">FK</span> <span class="ix">IX</span></td><td>no</td><td></td></tr>
+        <tr><td><code>id</code></td><td>serial</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>user_id</code></td><td>integer</td><td><span class="fk">FK</span> <span class="ix">IX</span></td><td>no</td><td></td></tr>
         <tr><td><code>refresh_token_hash</code></td><td>text</td><td><span class="u">U</span></td><td>no</td><td>Hash del refresh token</td></tr>
         <tr><td><code>user_agent</code></td><td>text</td><td></td><td>sí</td><td>Dispositivo/navegador</td></tr>
         <tr><td><code>ip_address</code></td><td>inet</td><td></td><td>sí</td><td>IP de origen</td></tr>
@@ -225,10 +238,40 @@ erDiagram
         <tr><td><code>expires_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Caducidad (p. ej. 30 días)</td></tr>
         <tr><td><code>revoked_at</code></td><td>timestamptz</td><td></td><td>sí</td><td>Cierre de sesión / revocación</td></tr>
         <tr><td><code>created_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de creación</td></tr>
-        <tr><td><code>created_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
+        <tr><td><code>created_by</code></td><td>integer</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién creó el registro</td></tr>
         <tr><td><code>updated_at</code></td><td>timestamptz</td><td></td><td>no</td><td>Fecha de última modificación</td></tr>
-        <tr><td><code>updated_by</code></td><td>uuid</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
+        <tr><td><code>updated_by</code></td><td>integer</td><td><span class="fk">FK</span></td><td>sí</td><td>Quién modificó por última vez</td></tr>
       </table>
+    </div>
+    <div class="card">
+      <p class="tbl-title"><span class="dot" style="background:#00897b"></span><b>roles</b> — catálogo de roles de plataforma</p>
+      <table>
+        <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
+        <tr><td><code>id</code></td><td>serial</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>code</code></td><td>varchar(32)</td><td><span class="u">U</span></td><td>no</td><td><code>admin</code> · <code>buyer</code> · <code>seller</code> · <code>service_provider</code></td></tr>
+        <tr><td><code>name</code></td><td>varchar(60)</td><td></td><td>no</td><td>Nombre legible</td></tr>
+        <tr><td><code>description</code></td><td>text</td><td></td><td>sí</td><td></td></tr>
+        <tr><td><code>created_at</code> / <code>created_by</code> / <code>updated_at</code> / <code>updated_by</code></td><td>—</td><td></td><td></td><td>Auditoría</td></tr>
+      </table>
+      <p class="muted">Catálogo sembrado con 4 roles. <b>Roles ≠ perfiles:</b> el rol es la
+        <i>capacidad/autorización</i> (incluye <code>admin</code>, que no tiene perfil); el perfil es la
+        <i>instancia</i> del marketplace (un usuario puede tener varias tiendas = varios perfiles
+        vendedor, pero una sola capacidad <code>seller</code>).</p>
+    </div>
+
+    <div class="card">
+      <p class="tbl-title"><span class="dot" style="background:#00897b"></span><b>user_roles</b> — roles por usuario (N:M)</p>
+      <table>
+        <tr><th>Columna</th><th>Tipo</th><th>Llave</th><th>Nulo</th><th>Descripción</th></tr>
+        <tr><td><code>id</code></td><td>serial</td><td><span class="pk">PK</span></td><td>no</td><td></td></tr>
+        <tr><td><code>user_id</code></td><td>integer</td><td><span class="fk">FK</span>→users <span class="ix">IX</span></td><td>no</td><td>ON DELETE CASCADE</td></tr>
+        <tr><td><code>role_id</code></td><td>integer</td><td><span class="fk">FK</span>→roles <span class="ix">IX</span></td><td>no</td><td></td></tr>
+        <tr><td><code>created_at</code> / <code>created_by</code> / <code>updated_at</code> / <code>updated_by</code></td><td>—</td><td></td><td></td><td>Auditoría (<code>created_by</code> = quién asignó el rol)</td></tr>
+      </table>
+      <p class="muted"><span class="u">U</span>(user_id, role_id): un rol no se repite por usuario.
+        Al registrarse, el usuario nace con el rol <code>buyer</code>. Al crear un perfil
+        vendedor/servicios se le agrega <code>seller</code>/<code>service_provider</code>;
+        <code>admin</code> se otorga manualmente.</p>
     </div>
   </section>
 
@@ -243,6 +286,7 @@ erDiagram
         <tr><td>Contraseña</td><td><code>auth_identities.password_hash</code> (provider=password)</td></tr>
         <tr><td>Confirmar contraseña</td><td><span class="muted">no se persiste (validación de cliente)</span></td></tr>
         <tr><td>Continuar con Apple / Google</td><td><code>auth_identities(provider, provider_uid, email)</code></td></tr>
+        <tr><td>Rol por defecto (al registrarse)</td><td><code>user_roles</code> → rol <code>buyer</code></td></tr>
       </table>
     </div>
     <div class="card">
