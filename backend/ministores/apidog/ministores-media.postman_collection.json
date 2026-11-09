@@ -1,0 +1,543 @@
+{
+  "info": {
+    "_postman_id": "3056fbf8-326d-41b9-96fe-485ce8de64f0",
+    "name": "Ministores + Media (Complete)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "Catalogs - Categories",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/catalogs/categories"
+      }
+    },
+    {
+      "name": "Catalogs - Create category",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"snacks\",\n  \"name\": \"Snacks\",\n  \"description\": \"Botanas y snacks\",\n  \"isActive\": true\n}"
+        },
+        "url": "{{baseUrl}}/catalogs/categories"
+      }
+    },
+    {
+      "name": "Catalogs - Patch category (image support)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"description\": \"Categoría actualizada con imagen\",\n  \"imageMediaAssetId\": {{uploadedAssetId}}\n}"
+        },
+        "url": "{{baseUrl}}/catalogs/categories/{{storeCategoryId}}"
+      }
+    },
+    {
+      "name": "Catalogs - Units",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/catalogs/units"
+      }
+    },
+    {
+      "name": "Catalogs - Create unit",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"plate\",\n  \"name\": \"Plato\",\n  \"description\": \"Porción por plato\",\n  \"isActive\": true\n}"
+        },
+        "url": "{{baseUrl}}/catalogs/units"
+      }
+    },
+    {
+      "name": "Catalogs - Patch unit",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"description\": \"Porción individual\",\n  \"isActive\": true\n}"
+        },
+        "url": "{{baseUrl}}/catalogs/units/{{unitId}}"
+      }
+    },
+    {
+      "name": "Catalogs - Tags",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/catalogs/tags"
+      }
+    },
+    {
+      "name": "Catalogs - Create tag",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"vegan\",\n  \"name\": \"Vegano\",\n  \"description\": \"Producto vegano\",\n  \"imageMediaAssetId\": {{uploadedAssetId}},\n  \"isActive\": true\n}"
+        },
+        "url": "{{baseUrl}}/catalogs/tags"
+      }
+    },
+    {
+      "name": "Catalogs - Patch tag",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"description\": \"Etiqueta vegana\",\n  \"imageMediaAssetId\": {{uploadedAssetId}},\n  \"isActive\": true\n}"
+        },
+        "url": "{{baseUrl}}/catalogs/tags/{{tagId}}"
+      }
+    },
+    {
+      "name": "Media - Create asset (metadata)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ownerType\": \"store_category\",\n  \"ownerId\": {{storeCategoryId}},\n  \"mimeType\": \"image/webp\",\n  \"qualityMode\": \"optimized_default\"\n}"
+        },
+        "url": "{{baseUrl}}/media/assets"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json?.id) pm.collectionVariables.set('rawAssetId', String(json.id));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Media - Upload image",
+      "request": {
+        "method": "POST",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "ownerType", "value": "mini_store", "type": "text" },
+            { "key": "ownerId", "value": "{{sellerProfileId}}", "type": "text" },
+            { "key": "qualityMode", "value": "optimized_default", "type": "text" },
+            { "key": "includeHd", "value": "true", "type": "text" },
+            { "key": "file", "type": "file", "src": "" }
+          ]
+        },
+        "url": "{{baseUrl}}/media/assets/upload"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json?.id) pm.collectionVariables.set('uploadedAssetId', String(json.id));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Media - Get asset",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/media/assets/{{uploadedAssetId}}"
+      }
+    },
+    {
+      "name": "Media - List assets by owner",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/media/assets/owner/mini_store/{{sellerProfileId}}"
+      }
+    },
+    {
+      "name": "Media - Create variant manually",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"variant\": \"thumbnail\",\n  \"bucket\": \"local\",\n  \"storageKey\": \"manual/demo-thumb.webp\",\n  \"publicUrl\": \"http://localhost:3002/media/files/manual/demo-thumb.webp\",\n  \"sizeBytes\": 12345,\n  \"widthPx\": 320,\n  \"heightPx\": 320,\n  \"isDefault\": false\n}"
+        },
+        "url": "{{baseUrl}}/media/assets/{{rawAssetId}}/variants"
+      }
+    },
+    {
+      "name": "Stores - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-profile-id", "value": "{{sellerProfileId}}" },
+          { "key": "x-user-id", "value": "{{actorUserId}}" },
+          { "key": "x-correlation-id", "value": "req-create-store-001" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sellerProfileId\": {{sellerProfileId}},\n  \"name\": \"Mini Tienda Florencia\",\n  \"slug\": \"mini-tienda-florencia\",\n  \"categoryId\": {{storeCategoryId}},\n  \"accentColor\": \"#EF6C00\",\n  \"tagline\": \"Lo mejor del barrio\",\n  \"description\": \"Tienda demo\",\n  \"logoMediaAssetId\": {{uploadedAssetId}},\n  \"deliveryOptions\": [\"pickup\", \"delivery\"],\n  \"paymentMethods\": [\"cash\", \"transfer\"]\n}"
+        },
+        "url": "{{baseUrl}}/stores"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json?.id) pm.collectionVariables.set('storeId', String(json.id));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stores - Create with image",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-profile-id", "value": "{{sellerProfileId}}" },
+          { "key": "x-user-id", "value": "{{actorUserId}}" },
+          { "key": "x-correlation-id", "value": "req-create-store-img-001" }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "sellerProfileId", "value": "{{sellerProfileId}}", "type": "text" },
+            { "key": "name", "value": "Mini Tienda Con Imagen", "type": "text" },
+            { "key": "slug", "value": "mini-tienda-con-imagen", "type": "text" },
+            { "key": "categoryId", "value": "{{storeCategoryId}}", "type": "text" },
+            { "key": "accentColor", "value": "#1E88E5", "type": "text" },
+            { "key": "qualityMode", "value": "optimized_default", "type": "text" },
+            { "key": "includeHd", "value": "true", "type": "text" },
+            { "key": "deliveryOptions", "value": "pickup,delivery", "type": "text" },
+            { "key": "paymentMethods", "value": "cash,transfer", "type": "text" },
+            { "key": "logo", "type": "file", "src": "" },
+            { "key": "cover", "type": "file", "src": "" }
+          ]
+        },
+        "url": "{{baseUrl}}/stores/with-image"
+      }
+    },
+    {
+      "name": "Stores - Mine",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "x-profile-id", "value": "{{sellerProfileId}}" }],
+        "url": "{{baseUrl}}/stores/mine"
+      }
+    },
+    {
+      "name": "Stores - Get by id",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/stores/{{storeId}}"
+      }
+    },
+    {
+      "name": "Stores - Patch",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-profile-id", "value": "{{sellerProfileId}}" },
+          { "key": "x-user-id", "value": "{{actorUserId}}" },
+          { "key": "x-correlation-id", "value": "req-patch-store-001" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tagline\": \"Nuevo slogan\",\n  \"isOpen\": true,\n  \"status\": \"active\"\n}"
+        },
+        "url": "{{baseUrl}}/stores/{{storeId}}"
+      }
+    },
+    {
+      "name": "Stores - Patch with image",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "x-profile-id", "value": "{{sellerProfileId}}" },
+          { "key": "x-user-id", "value": "{{actorUserId}}" },
+          { "key": "x-correlation-id", "value": "req-patch-store-img-001" }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "tagline", "value": "Tienda actualizada con cover", "type": "text" },
+            { "key": "qualityMode", "value": "optimized_default", "type": "text" },
+            { "key": "includeHd", "value": "true", "type": "text" },
+            { "key": "logo", "type": "file", "src": "" },
+            { "key": "cover", "type": "file", "src": "" }
+          ]
+        },
+        "url": "{{baseUrl}}/stores/{{storeId}}/with-image"
+      }
+    },
+    {
+      "name": "Sections - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-profile-id", "value": "{{sellerProfileId}}" },
+          { "key": "x-user-id", "value": "{{actorUserId}}" },
+          { "key": "x-correlation-id", "value": "req-create-section-001" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Del día\",\n  \"position\": 1,\n  \"description\": \"Productos del día\"\n}"
+        },
+        "url": "{{baseUrl}}/stores/{{storeId}}/sections"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json?.id) pm.collectionVariables.set('sectionId', String(json.id));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sections - List",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/stores/{{storeId}}/sections"
+      }
+    },
+    {
+      "name": "Sections - Patch",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-profile-id", "value": "{{sellerProfileId}}" },
+          { "key": "x-user-id", "value": "{{actorUserId}}" },
+          { "key": "x-correlation-id", "value": "req-patch-section-001" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Especiales\",\n  \"position\": 2\n}"
+        },
+        "url": "{{baseUrl}}/stores/{{storeId}}/sections/{{sectionId}}"
+      }
+    },
+    {
+      "name": "Products - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-profile-id", "value": "{{sellerProfileId}}" },
+          { "key": "x-user-id", "value": "{{actorUserId}}" },
+          { "key": "x-correlation-id", "value": "req-create-product-001" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sectionId\": {{sectionId}},\n  \"name\": \"Tamal verde\",\n  \"description\": \"Tamal de pollo en salsa verde\",\n  \"price\": 35,\n  \"offerPrice\": 30,\n  \"unitId\": {{unitId}},\n  \"tagIds\": [1],\n  \"stock\": \"available\",\n  \"status\": \"published\",\n  \"isFeatured\": true,\n  \"imageMediaAssetId\": {{uploadedAssetId}}\n}"
+        },
+        "url": "{{baseUrl}}/stores/{{storeId}}/products"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json?.id) pm.collectionVariables.set('productId', String(json.id));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products - Create with image",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-profile-id", "value": "{{sellerProfileId}}" },
+          { "key": "x-user-id", "value": "{{actorUserId}}" },
+          { "key": "x-correlation-id", "value": "req-create-product-img-001" }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "name", "value": "Tamal rojo", "type": "text" },
+            { "key": "description", "value": "Tamal en salsa roja", "type": "text" },
+            { "key": "price", "value": "40", "type": "text" },
+            { "key": "offerPrice", "value": "35", "type": "text" },
+            { "key": "unitId", "value": "{{unitId}}", "type": "text" },
+            { "key": "tagIds", "value": "1", "type": "text" },
+            { "key": "stock", "value": "available", "type": "text" },
+            { "key": "status", "value": "published", "type": "text" },
+            { "key": "isFeatured", "value": "false", "type": "text" },
+            { "key": "qualityMode", "value": "optimized_default", "type": "text" },
+            { "key": "includeHd", "value": "true", "type": "text" },
+            { "key": "file", "type": "file", "src": "" }
+          ]
+        },
+        "url": "{{baseUrl}}/stores/{{storeId}}/products/with-image"
+      }
+    },
+    {
+      "name": "Products - List",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/stores/{{storeId}}/products"
+      }
+    },
+    {
+      "name": "Products - Get by id",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/stores/{{storeId}}/products/{{productId}}"
+      }
+    },
+    {
+      "name": "Products - Patch",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-profile-id", "value": "{{sellerProfileId}}" },
+          { "key": "x-user-id", "value": "{{actorUserId}}" },
+          { "key": "x-correlation-id", "value": "req-patch-product-001" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"price\": 38,\n  \"offerPrice\": 34,\n  \"tagIds\": [1],\n  \"isFeatured\": false\n}"
+        },
+        "url": "{{baseUrl}}/stores/{{storeId}}/products/{{productId}}"
+      }
+    },
+    {
+      "name": "Products - Patch with image",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "x-profile-id", "value": "{{sellerProfileId}}" },
+          { "key": "x-user-id", "value": "{{actorUserId}}" },
+          { "key": "x-correlation-id", "value": "req-patch-product-img-001" }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "price", "value": "42", "type": "text" },
+            { "key": "offerPrice", "value": "39", "type": "text" },
+            { "key": "tagIds", "value": "1", "type": "text" },
+            { "key": "qualityMode", "value": "optimized_default", "type": "text" },
+            { "key": "includeHd", "value": "true", "type": "text" },
+            { "key": "file", "type": "file", "src": "" }
+          ]
+        },
+        "url": "{{baseUrl}}/stores/{{storeId}}/products/{{productId}}/with-image"
+      }
+    },
+    {
+      "name": "Products - Soft delete",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "x-profile-id", "value": "{{sellerProfileId}}" },
+          { "key": "x-user-id", "value": "{{actorUserId}}" },
+          { "key": "x-correlation-id", "value": "req-del-product-001" }
+        ],
+        "url": "{{baseUrl}}/stores/{{storeId}}/products/{{productId}}"
+      }
+    },
+    {
+      "name": "Sections - Soft delete",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "x-profile-id", "value": "{{sellerProfileId}}" },
+          { "key": "x-user-id", "value": "{{actorUserId}}" },
+          { "key": "x-correlation-id", "value": "req-del-section-001" }
+        ],
+        "url": "{{baseUrl}}/stores/{{storeId}}/sections/{{sectionId}}"
+      }
+    },
+    {
+      "name": "Stores - Soft delete",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "x-profile-id", "value": "{{sellerProfileId}}" },
+          { "key": "x-user-id", "value": "{{actorUserId}}" },
+          { "key": "x-correlation-id", "value": "req-del-store-001" }
+        ],
+        "url": "{{baseUrl}}/stores/{{storeId}}"
+      }
+    },
+    {
+      "name": "Audit logs - List",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/audit-logs?limit=50"
+      }
+    },
+    {
+      "name": "Audit logs - Filter by store",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/audit-logs?entityName=mini_store&entityId={{storeId}}&limit=20"
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3002" },
+    { "key": "sellerProfileId", "value": "101" },
+    { "key": "actorUserId", "value": "5001" },
+    { "key": "storeCategoryId", "value": "1" },
+    { "key": "unitId", "value": "1" },
+    { "key": "rawAssetId", "value": "0" },
+    { "key": "uploadedAssetId", "value": "0" },
+    { "key": "storeId", "value": "0" },
+    { "key": "sectionId", "value": "0" },
+    { "key": "productId", "value": "0" },
+    { "key": "tagId", "value": "1" }
+  ]
+}

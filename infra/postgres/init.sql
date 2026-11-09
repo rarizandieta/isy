@@ -7,6 +7,7 @@
 
 CREATE DATABASE identity;
 CREATE DATABASE ministores;
+CREATE DATABASE media;
 
 -- (Futuro / prod) Roles por servicio con mínimo privilegio, por ejemplo:
 --   CREATE ROLE identity_user LOGIN PASSWORD '...';
