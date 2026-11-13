@@ -30,6 +30,14 @@ export class StoreProductEntity {
   @Column({ name: 'image_url', type: 'text', nullable: true })
   imageUrl!: string | null;
 
+  // Imagen del producto como BLOB (bytea), recibida/entregada en base64.
+  // select:false: no se carga salvo que se pida explícitamente (ver servicio).
+  @Column({ name: 'image_blob', type: 'bytea', nullable: true, select: false })
+  imageBlob!: Buffer | null;
+
+  @Column({ name: 'image_mime', type: 'varchar', length: 64, nullable: true, select: false })
+  imageMime!: string | null;
+
   @Column({ type: 'enum', enum: StockStatus, default: StockStatus.AVAILABLE })
   stock!: StockStatus;
 

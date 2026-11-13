@@ -4,10 +4,15 @@ Este documento resume qué se necesita para publicar el backend en producción y
 cómo conviven las configuraciones de **desarrollo** y **producción** sin
 pisarse. Está pensado para completarse cuando tengas el dominio y el servidor.
 
-> Estado actual (desarrollo): el borde (nginx 443 → gateway → identity) ya
-> funciona con un **certificado autofirmado**. La app, en build _debug_, confía
-> en ese certificado y entra por `https://…/api`. Nada de esto se usa en
-> producción; ver la sección de separación dev/prod.
+> Estado actual (desarrollo): la app entra por el **API Gateway**, que valida el
+> token, inyecta la identidad por headers (`x-user-id`, `x-profile-id`,
+> `x-profile-type`) y hace de proxy a los microservicios (identity en `/auth/*`,
+> ministores en `/stores`, `/catalogs`, …). En **dev** el gateway se publica en
+> el host en el puerto **3000** (HTTP, sin TLS) para simplificar la conexión
+> desde el emulador y, sobre todo, desde un **dispositivo físico** por la IP LAN.
+> En **producción** el único expuesto sigue siendo **nginx (443)** con
+> certificado real; ver la sección de separación dev/prod. El borde nginx+TLS
+> autofirmado también sigue disponible en dev como alternativa.
 
 ---
 
@@ -28,7 +33,7 @@ pisarse. Está pensado para completarse cuando tengas el dominio y el servidor.
 - [ ] `nginx.conf` de producción: `server_name` con tu dominio, certificados reales, redirección 80→443, **HSTS** reactivado y cabeceras de seguridad.
 - [ ] Emisión y **renovación automática** del certificado (si eliges Let's Encrypt).
 - [ ] Compose de producción: solo **nginx** expuesto; sin Adminer ni puertos de microservicios publicados; credenciales por variables de entorno.
-- [ ] **App (build release)**: `baseUrl = https://tu-dominio/api`, sin cleartext, con **SSL pinning** clavado a tu certificado.
+- [ ] **App (build release)**: `GATEWAY_BASE_URL = https://tu-dominio/api` (apuntando al gateway tras nginx), sin cleartext, con **SSL pinning** clavado a tu certificado.
 - [ ] Migración de **JWT a RS256** (identity firma con la clave privada, el gateway valida con la pública).
 
 ## 3. Cómo quedan separados dev y prod
@@ -49,9 +54,11 @@ La separación ya está montada en el repo; estos son los mecanismos:
 - Los valores cambian por **archivos de entorno**: `.env` (dev) vs `.env.prod` (servidor). Ya existe `.env.example` como plantilla.
 
 ### App Flutter
-- Build **debug** → configuración de dev: certificado autofirmado de confianza + cleartext a `localhost`/`10.0.2.2` (`android/app/src/debug/`). **No** se incluye en release.
+- Toda la app habla con el **gateway** (una sola URL base). El `baseUrl` se
+  inyecta por build con `--dart-define=GATEWAY_BASE_URL=…`, así no hay URLs
+  quemadas. Por defecto (sin override): emulador `http://10.0.2.2:3000`, escritorio/web `http://localhost:3000`.
+- Build **debug** → configuración de dev: se permite **cleartext (HTTP) a cualquier host** (`android/app/src/debug/res/xml/network_security_config.xml`) para poder usar la IP LAN del equipo desde un dispositivo físico; además confía en el certificado autofirmado para el caso HTTPS. **No** se incluye en release.
 - Build **release** → configuración de prod: tu dominio, HTTPS con CA pública y **SSL pinning**. Sin cleartext.
-- El `baseUrl` se inyecta por build (`--dart-define=IDENTITY_BASE_URL=…`), así no hay URLs quemadas.
 
 ### Certificados
 - Dev: autofirmado en `infra/nginx/certs/` (ignorado por git).
@@ -71,25 +78,39 @@ La separación ya está montada en el repo; estos son los mecanismos:
 
 ## 5. Referencia del setup de desarrollo actual
 
-Para reproducir el entorno de dev por el borde 443:
+La app entra por el **gateway en el puerto 3000** (HTTP). El override de dev
+(`docker-compose.override.yml`) ya publica ese puerto.
 
 ```powershell
-# 1) Backend completo (nginx + gateway + identity + postgres + redis + adminer)
+# 1) Backend completo (nginx + gateway + identity + ministores + postgres + redis + adminer)
 docker compose up -d --build
-
-# 2) Certificado autofirmado (si falta), con SAN para los hosts de dev
-#    Generado en infra/nginx/certs/server.crt + server.key
-#    SAN: DNS:localhost, IP:127.0.0.1, IP:10.0.2.2
-
-# 3) Túnel del dispositivo físico hacia el borde (puerto alto en el teléfono)
-adb -s <device> reverse tcp:8443 tcp:443
-
-# 4) App apuntando al borde HTTPS
-flutter run -d <device> --dart-define=IDENTITY_BASE_URL=https://localhost:8443/api
 ```
 
-- Emulador Android (en vez de dispositivo físico): sin `adb reverse`, usando `https://10.0.2.2/...` (el SAN del certificado ya incluye `10.0.2.2`).
+### Emulador Android
+`10.0.2.2` es el alias del localhost del host, así que no hace falta configurar nada:
+```powershell
+flutter run -d emulator-5554
+# (equivale a --dart-define=GATEWAY_BASE_URL=http://10.0.2.2:3000)
+```
+
+### Dispositivo físico (mismo Wi-Fi/LAN que el equipo de desarrollo)
+1. Averigua la IP LAN del equipo (p. ej. `192.168.1.50`):
+   ```powershell
+   ipconfig   # busca "IPv4 Address" de tu adaptador Wi-Fi/Ethernet
+   ```
+2. Asegúrate de que el **firewall** del equipo permita entrada al puerto 3000.
+3. Corre la app apuntando a esa IP:
+   ```powershell
+   flutter run -d <device-id> --dart-define=GATEWAY_BASE_URL=http://192.168.1.50:3000
+   ```
+   > Alternativa sin Wi-Fi: `adb -s <device> reverse tcp:3000 tcp:3000` y luego
+   > `--dart-define=GATEWAY_BASE_URL=http://localhost:3000`.
+
 - Adminer (inspección de BD, solo dev): http://localhost:8080 — PostgreSQL, servidor `postgres`, usuario `isy`, contraseña `isy`.
+- Alternativa por el borde HTTPS (nginx 443) sigue disponible en dev: certificado
+  autofirmado en `infra/nginx/certs/` (SAN `localhost`, `127.0.0.1`, `10.0.2.2`)
+  y la app confía en él vía el asset `isy_dev_ca.pem`. Para dispositivo físico por
+  HTTPS haría falta `adb reverse tcp:8443 tcp:443` + `GATEWAY_BASE_URL=https://localhost:8443/api`.
 
 ### Confianza del certificado en la app (detalle importante)
 

@@ -1,9 +1,13 @@
 import type {
   AuthResult,
+  CreateProfileInput,
   LoginInput,
+  ProfileList,
+  ProfileMutationResult,
   PublicUser,
   RefreshInput,
   RegisterInput,
+  RevokedAccess,
   SessionMeta,
 } from '../dto/auth.dto.js';
 
@@ -24,6 +28,27 @@ export abstract class AuthService {
   /** Rota un refresh token válido y emite un nuevo access. */
   abstract refresh(input: RefreshInput, meta: SessionMeta): Promise<AuthResult>;
 
-  /** Revoca una sesión (idempotente). */
-  abstract logout(input: RefreshInput): Promise<void>;
+  /**
+   * Revoca una sesión (idempotente). Si se pasa el access token actual, además
+   * lo mete en la blocklist para revocación inmediata.
+   */
+  abstract logout(input: RefreshInput, access?: RevokedAccess): Promise<void>;
+
+  /** Lista los perfiles del usuario e indica cuál está activo. */
+  abstract listProfiles(userId: number): Promise<ProfileList>;
+
+  /**
+   * Crea un perfil adicional (vendedor / servicios), lo deja activo y re-emite
+   * el access token con el nuevo perfil activo.
+   */
+  abstract createProfile(
+    userId: number,
+    input: CreateProfileInput,
+  ): Promise<ProfileMutationResult>;
+
+  /**
+   * Cambia el perfil activo del usuario y re-emite el access token. Lanza si el
+   * perfil no existe o no pertenece al usuario.
+   */
+  abstract switchProfile(userId: number, profileId: number): Promise<ProfileMutationResult>;
 }

@@ -1,0 +1,3 @@
+ZONES: 1:Condado Almería | 3:Condado Florenza | 4:Condominio Valle de Navarra | 2:Montecastelo | 5:Pasaje de Navarra
+store2 coverageZones count: 0
+store2 has coverageZones key: True

@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   integer,
   pgEnum,
   pgTable,
@@ -31,6 +32,14 @@ export const userStatus = pgEnum('user_status', [
 ]);
 
 export const authProvider = pgEnum('auth_provider', ['password', 'google', 'apple']);
+
+/**
+ * Tipos de perfil. Un usuario nace con un perfil `buyer`; `seller` /
+ * `service_provider` se crean cuando el usuario decide vender u ofrecer
+ * servicios (p. ej. al crear una mini tienda). El perfil ACTIVO viaja en el
+ * access token y el gateway lo propaga a los microservicios (x-profile-id/type).
+ */
+export const profileType = pgEnum('profile_type', ['buyer', 'seller', 'service_provider']);
 
 /**
  * Audit columns present in EVERY table.
@@ -119,6 +128,32 @@ export const userRoles = pgTable(
   (table) => [uniqueIndex('user_roles_user_role_unique').on(table.userId, table.roleId)],
 );
 
+// --- profiles ---------------------------------------------------------------
+export const profiles = pgTable(
+  'profiles',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: profileType('type').notNull(),
+    // Nombre visible del perfil (p. ej. el de la mini tienda del vendedor).
+    displayName: varchar('display_name', { length: 120 }),
+    // Perfil activo por defecto del usuario: es el que viaja en el access token
+    // hasta que exista un flujo de cambio de perfil (crear mini tienda, etc.).
+    isDefault: boolean('is_default').notNull().default(false),
+    ...auditColumns,
+  },
+  (table) => [
+    // Un único perfil de cada tipo por usuario.
+    uniqueIndex('profiles_user_type_unique').on(table.userId, table.type),
+    // Como máximo un perfil marcado como "por defecto" por usuario.
+    uniqueIndex('profiles_user_default_unique')
+      .on(table.userId)
+      .where(sql`${table.isDefault}`),
+  ],
+);
+
 // --- user_sessions ----------------------------------------------------------
 export const userSessions = pgTable('user_sessions', {
   id: serial('id').primaryKey(),
@@ -140,3 +175,5 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Role = typeof roles.$inferSelect;
 export type UserSession = typeof userSessions.$inferSelect;
+export type Profile = typeof profiles.$inferSelect;
+export type NewProfile = typeof profiles.$inferInsert;

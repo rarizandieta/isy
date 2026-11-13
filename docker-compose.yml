@@ -31,7 +31,8 @@ services:
       IDENTITY_URL: "http://identity:3001"
       MINISTORES_URL: "http://ministores:3002"
       REDIS_URL: "redis://redis:6379"
-      # JWT_PUBLIC_KEY: definir en prod (clave pública para validar access tokens)
+      JWT_SECRET: "dev-secret-change-me"   # DEV ONLY (HS256): el gateway valida el access por firma.
+      # Prod: migrar a RS256 -> el gateway solo lleva JWT_PUBLIC_KEY (clave pública), nunca el secreto.
     depends_on:
       - identity
       - ministores
@@ -65,6 +66,14 @@ services:
       PORT: "3002"
       MEDIA_DATABASE_URL: "postgres://isy:isy@postgres:5432/media"
       DATABASE_URL: "postgres://isy:isy@postgres:5432/ministores"
+      # URL pública de media VACÍA -> las URLs se guardan RELATIVAS
+      # (/media/files/...); la app les antepone su base del gateway y nginx/gateway
+      # las sirve. Así son agnósticas del entorno (dev/prod/dispositivo).
+      MEDIA_PUBLIC_BASE_URL: ""
+    volumes:
+      # Persistencia de las imágenes del módulo media (no se pierden al recrear
+      # el contenedor). El servicio las escribe en /app/storage/media.
+      - mediadata:/app/storage/media
     depends_on:
       postgres:
         condition: service_healthy
@@ -97,7 +106,8 @@ services:
     # Sin volumen: estado efímero (rate-limit + blocklist de tokens).
 
 volumes:
-  pgdata:                          # único volumen de la plataforma
+  pgdata:                          # base de datos
+  mediadata:                       # archivos de media (imágenes de tienda/producto)
 
 networks:
   isy-net:

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
@@ -23,8 +23,16 @@ export class JwtTokenService extends TokenService {
 
   signAccessToken(claims: AccessTokenClaims, ttlSeconds: number): Promise<string> {
     return this.jwt.signAsync(
-      { sub: claims.sub, email: claims.email, roles: claims.roles },
-      { expiresIn: ttlSeconds },
+      {
+        sub: claims.sub,
+        email: claims.email,
+        roles: claims.roles,
+        // Perfil activo: el gateway lo propaga a los microservicios por headers.
+        profileId: claims.profileId,
+        profileType: claims.profileType,
+      },
+      // jwtid -> claim `jti`: identifica el token para poder revocarlo (blocklist).
+      { expiresIn: ttlSeconds, jwtid: randomUUID() },
     );
   }
 

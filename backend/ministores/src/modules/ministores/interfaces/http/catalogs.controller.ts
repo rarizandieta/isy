@@ -39,6 +39,11 @@ export class CatalogsController {
     return this.ministoresService.listTags();
   }
 
+  @Get('coverage-zones')
+  async listCoverageZones() {
+    return this.ministoresService.listCoverageZones();
+  }
+
   @Post('categories')
   async createCategory(@Body() body: CreateCategoryBody) {
     return this.ministoresService.createCategory(body);

@@ -5,25 +5,35 @@ import {
   EmailAlreadyRegisteredError,
   InvalidCredentialsError,
   InvalidRefreshTokenError,
+  ProfileNotFoundError,
   UserNotFoundError,
 } from '../../domain/errors/auth.errors.js';
+import type { Profile, ProfileType } from '../../domain/entities/profile.entity.js';
 import { SessionRepository } from '../../domain/repositories/session.repository.js';
 import { UserRepository } from '../../domain/repositories/user.repository.js';
 import { PasswordHasher } from '../../domain/services/password-hasher.js';
-import { TokenService } from '../../domain/services/token.service.js';
+import { TokenBlocklist } from '../../domain/services/token-blocklist.js';
+import { type AccessTokenClaims, TokenService } from '../../domain/services/token.service.js';
 import type {
   AuthResult,
   AuthTokens,
+  CreateProfileInput,
   LoginInput,
+  ProfileList,
+  ProfileMutationResult,
+  ProfileView,
   PublicUser,
   RefreshInput,
   RegisterInput,
+  RevokedAccess,
   SessionMeta,
 } from '../dto/auth.dto.js';
 import { AuthService } from './auth.service.js';
 
 /** Rol con el que nace todo usuario. */
 const DEFAULT_ROLE = 'buyer';
+/** Perfil activo con el que nace todo usuario (y que viaja en el token). */
+const DEFAULT_PROFILE_TYPE: ProfileType = 'buyer';
 
 /**
  * Implementación del caso de uso de autenticación. Orquesta los puertos
@@ -37,6 +47,7 @@ export class AuthServiceImpl extends AuthService {
     private readonly sessions: SessionRepository,
     private readonly hasher: PasswordHasher,
     private readonly tokens: TokenService,
+    private readonly blocklist: TokenBlocklist,
     private readonly config: ConfigService,
   ) {
     super();
@@ -55,6 +66,7 @@ export class AuthServiceImpl extends AuthService {
       email,
       passwordHash,
       roleCode: DEFAULT_ROLE,
+      profileType: DEFAULT_PROFILE_TYPE,
     });
 
     return { id: user.id, email: user.email, fullName: user.fullName, roles: [DEFAULT_ROLE] };
@@ -112,7 +124,7 @@ export class AuthServiceImpl extends AuthService {
 
     const accessTtl = this.accessTtl();
     const accessToken = await this.tokens.signAccessToken(
-      { sub: user.id, email: user.email, roles },
+      await this.buildAccessClaims(user, roles),
       accessTtl,
     );
 
@@ -125,12 +137,68 @@ export class AuthServiceImpl extends AuthService {
     };
   }
 
-  async logout(input: RefreshInput): Promise<void> {
+  async logout(input: RefreshInput, access?: RevokedAccess): Promise<void> {
     const tokenHash = this.tokens.hashRefreshToken(input.refreshToken);
     await this.sessions.revokeByTokenHash(tokenHash);
+
+    // Revocación inmediata del access token actual (si se aportó): a la blocklist
+    // con TTL = vida restante del token.
+    if (access) {
+      const ttl = access.expiresAt - Math.floor(Date.now() / 1000);
+      if (ttl > 0) {
+        await this.blocklist.block(access.jti, ttl);
+      }
+    }
+  }
+
+  async listProfiles(userId: number): Promise<ProfileList> {
+    return this.toProfileList(await this.users.listProfiles(userId));
+  }
+
+  async createProfile(userId: number, input: CreateProfileInput): Promise<ProfileMutationResult> {
+    await this.users.createProfile(userId, input.type, input.displayName.trim());
+    return this.profileMutationResult(userId);
+  }
+
+  async switchProfile(userId: number, profileId: number): Promise<ProfileMutationResult> {
+    const activated = await this.users.activateProfile(userId, profileId);
+    if (!activated) {
+      throw new ProfileNotFoundError();
+    }
+    return this.profileMutationResult(userId);
   }
 
   // --- helpers --------------------------------------------------------------
+
+  /**
+   * Re-emite el access token (el perfil activo cambió) y devuelve el estado de
+   * perfiles actualizado. El cliente reemplaza su access token con este.
+   */
+  private async profileMutationResult(userId: number): Promise<ProfileMutationResult> {
+    const user = await this.users.findById(userId);
+    if (!user) {
+      throw new UserNotFoundError();
+    }
+    const roles = await this.users.findRoleCodes(userId);
+    const accessTtl = this.accessTtl();
+    const accessToken = await this.tokens.signAccessToken(
+      await this.buildAccessClaims(user, roles),
+      accessTtl,
+    );
+    const { profiles, activeProfileId } = this.toProfileList(await this.users.listProfiles(userId));
+    return { accessToken, tokenType: 'Bearer', expiresIn: accessTtl, profiles, activeProfileId };
+  }
+
+  private toProfileList(profiles: Profile[]): ProfileList {
+    const views: ProfileView[] = profiles.map((p) => ({
+      id: p.id,
+      type: p.type,
+      displayName: p.displayName,
+      isActive: p.isDefault,
+    }));
+    const active = profiles.find((p) => p.isDefault);
+    return { profiles: views, activeProfileId: active?.id ?? null };
+  }
 
   private async issueTokens(
     user: User,
@@ -141,7 +209,7 @@ export class AuthServiceImpl extends AuthService {
     const refreshTtl = this.refreshTtl();
 
     const accessToken = await this.tokens.signAccessToken(
-      { sub: user.id, email: user.email, roles },
+      await this.buildAccessClaims(user, roles),
       accessTtl,
     );
     const refreshToken = this.tokens.generateRefreshToken();
@@ -155,6 +223,22 @@ export class AuthServiceImpl extends AuthService {
     });
 
     return { accessToken, refreshToken, tokenType: 'Bearer', expiresIn: accessTtl };
+  }
+
+  /**
+   * Arma los claims del access token incluyendo el perfil activo del usuario.
+   * El gateway propaga `profileId`/`profileType` a los microservicios como
+   * `x-profile-id` / `x-profile-type`.
+   */
+  private async buildAccessClaims(user: User, roles: string[]): Promise<AccessTokenClaims> {
+    const profile = await this.users.findActiveProfile(user.id);
+    return {
+      sub: user.id,
+      email: user.email,
+      roles,
+      profileId: profile?.id,
+      profileType: profile?.type,
+    };
   }
 
   private toPublicUser(user: User, roles: string[]): PublicUser {

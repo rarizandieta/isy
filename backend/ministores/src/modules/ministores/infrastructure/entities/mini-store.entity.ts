@@ -30,6 +30,22 @@ export class MiniStoreEntity {
   @Column({ name: 'cover_url', type: 'text', nullable: true })
   coverUrl!: string | null;
 
+  // Imágenes de identidad guardadas como BLOB (bytea). Se reciben/entregan como
+  // base64 (data URI). `select: false`: no se cargan en listados ni en las
+  // comprobaciones de propiedad; se piden explícitamente al construir la
+  // respuesta de una tienda (ver getStoreById).
+  @Column({ name: 'logo_image', type: 'bytea', nullable: true, select: false })
+  logoImage!: Buffer | null;
+
+  @Column({ name: 'logo_image_mime', type: 'varchar', length: 64, nullable: true, select: false })
+  logoImageMime!: string | null;
+
+  @Column({ name: 'cover_image', type: 'bytea', nullable: true, select: false })
+  coverImage!: Buffer | null;
+
+  @Column({ name: 'cover_image_mime', type: 'varchar', length: 64, nullable: true, select: false })
+  coverImageMime!: string | null;
+
   @Column({ name: 'accent_color', type: 'char', length: 7 })
   accentColor!: string;
 

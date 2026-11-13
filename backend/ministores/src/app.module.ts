@@ -5,6 +5,8 @@ import { HealthController } from './health.controller.js';
 import { MediaAssetEntity } from './modules/media/infrastructure/entities/media-asset.entity.js';
 import { MediaAssetVariantEntity } from './modules/media/infrastructure/entities/media-asset-variant.entity.js';
 import { AuditLogEntity } from './modules/ministores/infrastructure/entities/audit-log.entity.js';
+import { CoverageZoneEntity } from './modules/ministores/infrastructure/entities/coverage-zone.entity.js';
+import { MiniStoreCoverageZoneEntity } from './modules/ministores/infrastructure/entities/mini-store-coverage-zone.entity.js';
 import { MiniStoreDeliveryOptionEntity } from './modules/ministores/infrastructure/entities/mini-store-delivery-option.entity.js';
 import { MiniStorePaymentMethodEntity } from './modules/ministores/infrastructure/entities/mini-store-payment-method.entity.js';
 import { MiniStoreEntity } from './modules/ministores/infrastructure/entities/mini-store.entity.js';
@@ -42,6 +44,8 @@ import { MinistoresModule } from './modules/ministores/ministores.module.js';
           MiniStorePaymentMethodEntity,
           StoreProductEntity,
           AuditLogEntity,
+          CoverageZoneEntity,
+          MiniStoreCoverageZoneEntity,
         ],
         synchronize: false,
       }),

@@ -20,6 +20,7 @@ import {
   CreateStoreProductInput,
   CreateStoreSectionInput,
   MinistoresService,
+  ReorderStoreSectionsInput,
   UpdateStoreInput,
   UpdateStoreProductInput,
   UpdateStoreSectionInput,
@@ -44,12 +45,15 @@ interface CreateStoreRequestBody {
   coverUrl?: string;
   logoMediaAssetId?: number;
   coverMediaAssetId?: number;
+  logoImageBase64?: string | null;
+  coverImageBase64?: string | null;
   scheduleText?: string;
   zoneText?: string;
   isOpen?: boolean;
   status?: StoreStatus;
   deliveryOptions?: DeliveryOption[];
   paymentMethods?: PaymentMethod[];
+  coverageZoneIds?: number[];
 }
 
 interface UpdateStoreRequestBody {
@@ -63,12 +67,15 @@ interface UpdateStoreRequestBody {
   coverUrl?: string | null;
   logoMediaAssetId?: number | null;
   coverMediaAssetId?: number | null;
+  logoImageBase64?: string | null;
+  coverImageBase64?: string | null;
   scheduleText?: string | null;
   zoneText?: string | null;
   isOpen?: boolean;
   status?: StoreStatus;
   deliveryOptions?: DeliveryOption[];
   paymentMethods?: PaymentMethod[];
+  coverageZoneIds?: number[];
 }
 
 interface CreateStoreProductRequestBody {
@@ -81,6 +88,7 @@ interface CreateStoreProductRequestBody {
   tagIds?: number[];
   imageUrl?: string;
   imageMediaAssetId?: number;
+  imageBase64?: string | null;
   stock?: StockStatus;
   status?: ProductStatus;
   isFeatured?: boolean;
@@ -96,6 +104,7 @@ interface UpdateStoreProductRequestBody {
   tagIds?: number[];
   imageUrl?: string | null;
   imageMediaAssetId?: number | null;
+  imageBase64?: string | null;
   stock?: StockStatus;
   status?: ProductStatus;
   isFeatured?: boolean;
@@ -116,6 +125,10 @@ interface UpdateSectionRequestBody {
   imageUrl?: string | null;
   imageMediaAssetId?: number | null;
   isActive?: boolean;
+}
+
+interface ReorderSectionsRequestBody {
+  sectionIds: number[];
 }
 
 @Controller('stores')
@@ -162,12 +175,15 @@ export class MinistoresController {
       coverUrl: body.coverUrl,
       logoMediaAssetId: body.logoMediaAssetId,
       coverMediaAssetId: body.coverMediaAssetId,
+      logoImageBase64: body.logoImageBase64,
+      coverImageBase64: body.coverImageBase64,
       scheduleText: body.scheduleText,
       zoneText: body.zoneText,
       isOpen: body.isOpen,
       status: body.status,
       deliveryOptions: body.deliveryOptions,
       paymentMethods: body.paymentMethods,
+      coverageZoneIds: body.coverageZoneIds,
     };
     return this.ministoresService.createStore(input);
   }
@@ -331,6 +347,28 @@ export class MinistoresController {
     return this.ministoresService.createStoreSection(input);
   }
 
+  // IMPORTANTE: declarar ANTES de ':id/sections/:sectionId' para que el
+  // segmento estático 'reorder' no sea capturado por el :sectionId (ParseIntPipe).
+  @Patch(':id/sections/reorder')
+  async reorderStoreSections(
+    @Param('id', ParseIntPipe) id: number,
+    @Headers('x-profile-id') profileIdHeader: string,
+    @Headers('x-user-id') userIdHeader: string,
+    @Headers('x-correlation-id') correlationIdHeader: string,
+    @Body() body: ReorderSectionsRequestBody,
+  ) {
+    const input: ReorderStoreSectionsInput = {
+      storeId: id,
+      actorProfileId: this.parseOptionalPositiveInt(profileIdHeader),
+      actorUserId: this.parseOptionalPositiveInt(userIdHeader),
+      requestId: correlationIdHeader ?? null,
+      sectionIds: Array.isArray(body.sectionIds)
+        ? body.sectionIds.map((value) => Number(value)).filter((value) => Number.isFinite(value))
+        : [],
+    };
+    return this.ministoresService.reorderStoreSections(input);
+  }
+
   @Patch(':id/sections/:sectionId')
   async updateStoreSection(
     @Param('id', ParseIntPipe) id: number,
@@ -401,6 +439,7 @@ export class MinistoresController {
       tagIds: body.tagIds,
       imageUrl: body.imageUrl,
       imageMediaAssetId: body.imageMediaAssetId,
+      imageBase64: body.imageBase64,
       stock: body.stock,
       status: body.status,
       isFeatured: body.isFeatured,

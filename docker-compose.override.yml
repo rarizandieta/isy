@@ -1,23 +1,39 @@
 # Isy — Override de DESARROLLO (no usar en producción)
 #
 # Docker Compose carga este archivo automáticamente y lo fusiona con
-# docker-compose.yml. Su propósito es habilitar utilidades y accesos SOLO para
-# desarrollo:
-#   - publicar el puerto de identity al host (probar la app directamente), y
-#   - levantar Adminer para inspeccionar la base de datos.
+# docker-compose.yml. Es el ÚNICO archivo de overrides de desarrollo (se
+# consolidó aquí el antiguo docker-compose.dev.yml). Publica puertos y utilidades
+# SOLO para desarrollo:
+#   - identity (3001) y ministores (3002): probar cada microservicio directo.
+#   - postgres (5432): conectarse con un cliente nativo / correr migraciones.
+#   - Adminer (8080): inspeccionar la base de datos por web.
 #
 # Regla de arquitectura (producción): el único expuesto al host es nginx (443).
 # Por eso todo esto vive aquí, en un override de dev, y NO en el compose
-# principal.
+# principal. En producción se arranca con `docker compose -f docker-compose.yml`.
 
 services:
+  # Gateway publicado en dev para que la app móvil entre por el borde lógico
+  # (donde se inyecta x-profile-id/x-user-id) SIN pasar por nginx/TLS. La app
+  # usa http://<host>:3000 (emulador: 10.0.2.2:3000; dispositivo físico: IP LAN).
+  # En producción el único expuesto sigue siendo nginx (443); esto es solo dev.
+  gateway:
+    ports:
+      - "3000:3000"
+
   identity:
     ports:
       - "3001:3001" # host -> contenedor. Emulador Android: http://10.0.2.2:3001
 
+  ministores:
+    ports:
+      - "3002:3002" # host -> contenedor (pruebas directas con Apidog/Postman)
+
+  postgres:
+    ports:
+      - "5432:5432" # cliente nativo de Postgres y migraciones desde el host
+
   # Adminer: cliente web para inspeccionar Postgres (solo dev).
-  # Se conecta a la instancia de Postgres por la red interna (host "postgres"),
-  # así que NO hace falta publicar el 5432 al host.
   adminer:
     image: adminer:4.8.1
     restart: unless-stopped

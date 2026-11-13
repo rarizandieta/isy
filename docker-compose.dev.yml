@@ -1,8 +1,0 @@
-services:
-  postgres:
-    ports:
-      - "5432:5432"
-
-  ministores:
-    ports:
-      - "3002:3002"

@@ -31,3 +31,11 @@ export class UserNotFoundError extends DomainError {
     super('User not found');
   }
 }
+
+/** El perfil solicitado no existe o no pertenece al usuario. */
+export class ProfileNotFoundError extends DomainError {
+  readonly kind: DomainErrorKind = 'not_found';
+  constructor() {
+    super('Profile not found');
+  }
+}

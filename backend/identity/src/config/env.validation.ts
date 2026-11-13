@@ -13,6 +13,8 @@ export interface EnvConfig {
   ACCESS_TTL: number;
   /** Refresh token lifetime, in seconds. */
   REFRESH_TTL: number;
+  /** Redis connection string (blocklist de tokens revocados). */
+  REDIS_URL: string;
 }
 
 function requireString(
@@ -49,5 +51,10 @@ export function validateEnv(config: Record<string, unknown>): EnvConfig {
     JWT_SECRET,
     ACCESS_TTL: toNumber(config.ACCESS_TTL, 900), // 15 min
     REFRESH_TTL: toNumber(config.REFRESH_TTL, 2_592_000), // 30 days
+    // Redis es opcional: si no está disponible, la blocklist hace fail-open.
+    REDIS_URL:
+      typeof config.REDIS_URL === 'string' && config.REDIS_URL.trim().length > 0
+        ? config.REDIS_URL
+        : 'redis://localhost:6379',
   };
 }

@@ -16,6 +16,8 @@ import {
   StoreStatus,
 } from '../domain/ministores.enums.js';
 import { AuditLogEntity } from '../infrastructure/entities/audit-log.entity.js';
+import { CoverageZoneEntity } from '../infrastructure/entities/coverage-zone.entity.js';
+import { MiniStoreCoverageZoneEntity } from '../infrastructure/entities/mini-store-coverage-zone.entity.js';
 import { MiniStoreDeliveryOptionEntity } from '../infrastructure/entities/mini-store-delivery-option.entity.js';
 import { MiniStorePaymentMethodEntity } from '../infrastructure/entities/mini-store-payment-method.entity.js';
 import { MiniStoreEntity } from '../infrastructure/entities/mini-store.entity.js';
@@ -44,12 +46,18 @@ export interface CreateStoreInput extends ActorContext {
   coverUrl?: string | null;
   logoMediaAssetId?: number | null;
   coverMediaAssetId?: number | null;
+  /** Imagen de logo/perfil en base64 (data URI o base64 puro). */
+  logoImageBase64?: string | null;
+  /** Imagen de portada en base64 (data URI o base64 puro). */
+  coverImageBase64?: string | null;
   scheduleText?: string | null;
   zoneText?: string | null;
   isOpen?: boolean;
   status?: StoreStatus;
   deliveryOptions?: DeliveryOption[];
   paymentMethods?: PaymentMethod[];
+  /** Ids de zonas de cobertura (catálogo coverage_zones). */
+  coverageZoneIds?: number[];
 }
 
 export interface UpdateStoreInput extends ActorContext {
@@ -64,12 +72,17 @@ export interface UpdateStoreInput extends ActorContext {
   coverUrl?: string | null;
   logoMediaAssetId?: number | null;
   coverMediaAssetId?: number | null;
+  /** base64 (data URI o puro). null/'' limpia la imagen; undefined la deja igual. */
+  logoImageBase64?: string | null;
+  coverImageBase64?: string | null;
   scheduleText?: string | null;
   zoneText?: string | null;
   isOpen?: boolean;
   status?: StoreStatus;
   deliveryOptions?: DeliveryOption[];
   paymentMethods?: PaymentMethod[];
+  /** undefined = no cambia; [] limpia; lista = reemplaza las zonas de cobertura. */
+  coverageZoneIds?: number[];
 }
 
 export interface CreateStoreProductInput extends ActorContext {
@@ -83,6 +96,8 @@ export interface CreateStoreProductInput extends ActorContext {
   tagIds?: number[];
   imageUrl?: string | null;
   imageMediaAssetId?: number | null;
+  /** Imagen del producto en base64 (data URI o base64 puro). */
+  imageBase64?: string | null;
   stock?: StockStatus;
   status?: ProductStatus;
   isFeatured?: boolean;
@@ -100,6 +115,8 @@ export interface UpdateStoreProductInput extends ActorContext {
   tagIds?: number[];
   imageUrl?: string | null;
   imageMediaAssetId?: number | null;
+  /** base64 (data URI o puro). null/'' limpia la imagen; undefined la deja igual. */
+  imageBase64?: string | null;
   stock?: StockStatus;
   status?: ProductStatus;
   isFeatured?: boolean;
@@ -123,6 +140,12 @@ export interface UpdateStoreSectionInput extends ActorContext {
   imageUrl?: string | null;
   imageMediaAssetId?: number | null;
   isActive?: boolean;
+}
+
+export interface ReorderStoreSectionsInput extends ActorContext {
+  storeId: number;
+  /** Ids de TODAS las secciones vivas de la tienda, en el orden deseado. */
+  sectionIds: number[];
 }
 
 export interface UpdateStoreCategoryInput {
@@ -208,11 +231,23 @@ export class MinistoresService {
     private readonly storeProductTagRepository: Repository<StoreProductTagEntity>,
     @InjectRepository(AuditLogEntity, 'ministores')
     private readonly auditLogRepository: Repository<AuditLogEntity>,
+    @InjectRepository(CoverageZoneEntity, 'ministores')
+    private readonly coverageZoneRepository: Repository<CoverageZoneEntity>,
+    @InjectRepository(MiniStoreCoverageZoneEntity, 'ministores')
+    private readonly storeCoverageZoneRepository: Repository<MiniStoreCoverageZoneEntity>,
     private readonly mediaService: MediaService,
   ) {}
 
   async listCategories() {
     return this.storeCategoryRepository.find({
+      where: { isActive: true },
+      order: { name: 'ASC' },
+    });
+  }
+
+  /** Catálogo de zonas de cobertura (ubicaciones fijas con coordenadas). */
+  async listCoverageZones() {
+    return this.coverageZoneRepository.find({
       where: { isActive: true },
       order: { name: 'ASC' },
     });
@@ -380,6 +415,23 @@ export class MinistoresService {
       mediaAssetId: input.coverMediaAssetId,
     });
 
+    let logoUrl = resolvedLogoUrl;
+    if (input.logoImageBase64) {
+      logoUrl = await this.uploadImageFromBase64(
+        input.logoImageBase64,
+        MediaOwnerType.MINI_STORE,
+        input.sellerProfileId,
+      );
+    }
+    let coverUrl = resolvedCoverUrl;
+    if (input.coverImageBase64) {
+      coverUrl = await this.uploadImageFromBase64(
+        input.coverImageBase64,
+        MediaOwnerType.MINI_STORE,
+        input.sellerProfileId,
+      );
+    }
+
     const store = await this.miniStoreRepository.save({
       sellerProfileId: String(input.sellerProfileId),
       slug: input.slug,
@@ -387,8 +439,8 @@ export class MinistoresService {
       tagline: input.tagline ?? null,
       description: input.description ?? null,
       categoryId: String(input.categoryId),
-      logoUrl: resolvedLogoUrl,
-      coverUrl: resolvedCoverUrl,
+      logoUrl,
+      coverUrl,
       accentColor: input.accentColor,
       status: input.status ?? StoreStatus.DRAFT,
       isOpen: input.isOpen ?? false,
@@ -400,6 +452,7 @@ export class MinistoresService {
       deliveryOptions: input.deliveryOptions,
       paymentMethods: input.paymentMethods,
     });
+    await this.replaceCoverageZones(store.id, input.coverageZoneIds);
 
     await this.insertAuditLog({
       entityName: 'mini_stores',
@@ -407,7 +460,7 @@ export class MinistoresService {
       action: AuditAction.INSERT,
       actorProfileId: input.actorProfileId,
       requestId: input.requestId,
-      changes: { after: store },
+      changes: { after: this.redactStoreImages(store) },
     });
 
     return this.getStoreById(Number(store.id));
@@ -524,12 +577,33 @@ export class MinistoresService {
       });
     }
 
+    // Imágenes base64 -> archivo (media). undefined = sin cambios; null/'' = limpiar.
+    if (input.logoImageBase64 !== undefined) {
+      patch.logoUrl = input.logoImageBase64
+        ? await this.uploadImageFromBase64(
+            input.logoImageBase64,
+            MediaOwnerType.MINI_STORE,
+            Number(store.sellerProfileId),
+          )
+        : null;
+    }
+    if (input.coverImageBase64 !== undefined) {
+      patch.coverUrl = input.coverImageBase64
+        ? await this.uploadImageFromBase64(
+            input.coverImageBase64,
+            MediaOwnerType.MINI_STORE,
+            Number(store.sellerProfileId),
+          )
+        : null;
+    }
+
     await this.miniStoreRepository.update({ id: store.id }, patch);
 
     await this.replaceStoreOptions(store.id, {
       deliveryOptions: input.deliveryOptions,
       paymentMethods: input.paymentMethods,
     });
+    await this.replaceCoverageZones(store.id, input.coverageZoneIds);
 
     await this.insertAuditLog({
       entityName: 'mini_stores',
@@ -537,7 +611,7 @@ export class MinistoresService {
       action: AuditAction.UPDATE,
       actorProfileId: input.actorProfileId,
       requestId: input.requestId,
-      changes: { before: store, after: patch },
+      changes: { before: store, after: this.redactStoreImages(patch) },
     });
 
     return this.getStoreById(Number(store.id));
@@ -583,12 +657,22 @@ export class MinistoresService {
     const paymentMethods = await this.storePaymentMethodRepository.find({
       where: { storeId: store.id },
     });
+    const coverageLinks = await this.storeCoverageZoneRepository.find({
+      where: { storeId: store.id },
+    });
+    const coverageZones = coverageLinks.length
+      ? await this.coverageZoneRepository.find({
+          where: { id: In(coverageLinks.map((link) => link.zoneId)) },
+          order: { name: 'ASC' },
+        })
+      : [];
 
     return {
       ...store,
       category,
       delivery_options: deliveryOptions.map((item) => item.option),
       payment_methods: paymentMethods.map((item) => item.method),
+      coverageZones,
     };
   }
 
@@ -619,6 +703,14 @@ export class MinistoresService {
       directUrl: input.imageUrl,
       mediaAssetId: input.imageMediaAssetId,
     });
+    let imageUrl = resolvedImageUrl;
+    if (input.imageBase64) {
+      imageUrl = await this.uploadImageFromBase64(
+        input.imageBase64,
+        MediaOwnerType.STORE_PRODUCT,
+        input.storeId,
+      );
+    }
 
     const product = await this.storeProductRepository.save({
       storeId: String(input.storeId),
@@ -634,7 +726,7 @@ export class MinistoresService {
           ? input.offerPrice.toFixed(2)
           : null,
       unitId: String(input.unitId),
-      imageUrl: resolvedImageUrl,
+      imageUrl,
       stock: input.stock ?? StockStatus.AVAILABLE,
       status: input.status ?? ProductStatus.DRAFT,
       isFeatured: input.isFeatured ?? false,
@@ -655,10 +747,10 @@ export class MinistoresService {
       action: AuditAction.INSERT,
       actorProfileId: input.actorProfileId,
       requestId: input.requestId,
-      changes: { after: product },
+      changes: { after: this.redactStoreImages(product) },
     });
 
-    return product;
+    return this.getStoreProductById(input.storeId, Number(product.id));
   }
 
   async createStoreProductWithImageUpload(
@@ -758,6 +850,15 @@ export class MinistoresService {
         mediaAssetId: input.imageMediaAssetId,
       });
     }
+    if (input.imageBase64 !== undefined) {
+      patch.imageUrl = input.imageBase64
+        ? await this.uploadImageFromBase64(
+            input.imageBase64,
+            MediaOwnerType.STORE_PRODUCT,
+            input.storeId,
+          )
+        : null;
+    }
 
     await this.storeProductRepository.update({ id: product.id }, patch);
 
@@ -775,7 +876,7 @@ export class MinistoresService {
       action: AuditAction.UPDATE,
       actorProfileId: input.actorProfileId,
       requestId: input.requestId,
-      changes: { before: product, after: patch },
+      changes: { before: product, after: this.redactStoreImages(patch) },
     });
 
     return this.getStoreProductById(input.storeId, input.productId);
@@ -856,8 +957,70 @@ export class MinistoresService {
     return products.map((product) => ({
       ...product,
       unit: unitById.get(product.unitId) ?? null,
-      // Kept lightweight for list calls; use get by id for full tags payload if needed.
+      // imageUrl viene en el spread del entity. Tags omitidos (ligero).
     }));
+  }
+
+  /**
+   * Feed del marketplace: productos PUBLICADOS de tiendas ACTIVAS, más nuevos
+   * primero, paginado (limit/offset). Cada ítem incluye su unidad y una
+   * referencia ligera de la tienda (id, nombre, slug, logoUrl, accentColor)
+   * para pintar el encabezado de la tarjeta. Es agnóstico del perfil: no filtra
+   * por vendedor ni requiere identidad.
+   */
+  async listFeed(params: { limit?: number; offset?: number } = {}) {
+    const rawLimit = Number(params.limit);
+    const limit = Number.isFinite(rawLimit)
+      ? Math.min(Math.max(Math.trunc(rawLimit), 1), 50)
+      : 20;
+    const rawOffset = Number(params.offset);
+    const offset = Number.isFinite(rawOffset) ? Math.max(Math.trunc(rawOffset), 0) : 0;
+
+    // Tiendas activas (no borradas): referencia ligera para el encabezado.
+    const stores = await this.miniStoreRepository.find({
+      where: { status: StoreStatus.ACTIVE, deletedAt: IsNull() },
+    });
+    if (stores.length === 0) {
+      return { items: [], total: 0, limit, offset };
+    }
+    const storeById = new Map(
+      stores.map((store) => [
+        store.id,
+        {
+          id: store.id,
+          name: store.name,
+          slug: store.slug,
+          logoUrl: store.logoUrl,
+          accentColor: store.accentColor,
+        },
+      ]),
+    );
+
+    // Productos publicados de esas tiendas, paginados, más nuevos primero.
+    const [products, total] = await this.storeProductRepository.findAndCount({
+      where: {
+        storeId: In(stores.map((store) => store.id)),
+        status: ProductStatus.PUBLISHED,
+        deletedAt: IsNull(),
+      },
+      order: { id: 'DESC' },
+      skip: offset,
+      take: limit,
+    });
+
+    const unitIds = [...new Set(products.map((product) => product.unitId))];
+    const units = unitIds.length
+      ? await this.productUnitRepository.find({ where: { id: In(unitIds) } })
+      : [];
+    const unitById = new Map(units.map((unit) => [unit.id, unit]));
+
+    const items = products.map((product) => ({
+      ...product,
+      unit: unitById.get(product.unitId) ?? null,
+      store: storeById.get(product.storeId) ?? null,
+    }));
+
+    return { items, total, limit, offset };
   }
 
   async createStoreSection(input: CreateStoreSectionInput) {
@@ -985,6 +1148,66 @@ export class MinistoresService {
     return { id: sectionId, deleted: true };
   }
 
+  /**
+   * Reordena TODAS las secciones de la tienda según `sectionIds` (quedan con
+   * posiciones 1..N en ese orden). Atómico: por el UNIQUE (store_id, position)
+   * primero se desplazan a un rango temporal alto y luego se asignan las
+   * posiciones finales, todo dentro de una transacción. `sectionIds` debe ser
+   * exactamente el conjunto de secciones vivas de la tienda.
+   */
+  async reorderStoreSections(input: ReorderStoreSectionsInput) {
+    const store = await this.getStoreEntityOrFail(input.storeId);
+    this.ensureStoreOwnership(store, input.actorProfileId);
+
+    const current = await this.storeSectionRepository.find({
+      where: { storeId: String(input.storeId), deletedAt: IsNull() },
+    });
+
+    const currentIds = current.map((s) => Number(s.id)).sort((a, b) => a - b);
+    const givenIds = [...input.sectionIds].sort((a, b) => a - b);
+    const sameSet =
+      currentIds.length === givenIds.length &&
+      currentIds.every((value, index) => value === givenIds[index]);
+    if (!sameSet) {
+      throw new BadRequestException(
+        "sectionIds must be exactly the set of this store's sections",
+      );
+    }
+
+    await this.storeSectionRepository.manager.transaction(async (manager) => {
+      // Fase 1: desplazar a un rango temporal alto para no chocar con el UNIQUE.
+      await manager
+        .createQueryBuilder()
+        .update(StoreSectionEntity)
+        .set({ position: () => '"position" + 100000' })
+        .where('store_id = :storeId AND deleted_at IS NULL', {
+          storeId: String(input.storeId),
+        })
+        .execute();
+      // Fase 2: posiciones finales 1..N en el orden recibido.
+      let position = 1;
+      for (const sectionId of input.sectionIds) {
+        await manager.update(
+          StoreSectionEntity,
+          { id: String(sectionId) },
+          { position },
+        );
+        position += 1;
+      }
+    });
+
+    await this.insertAuditLog({
+      entityName: 'store_sections',
+      entityId: input.storeId,
+      action: AuditAction.UPDATE,
+      actorProfileId: input.actorProfileId,
+      requestId: input.requestId,
+      changes: { after: { order: input.sectionIds } },
+    });
+
+    return this.listStoreSections(input.storeId);
+  }
+
   private async getStoreEntityOrFail(storeId: number) {
     const store = await this.miniStoreRepository.findOne({
       where: { id: String(storeId), deletedAt: IsNull() },
@@ -1027,6 +1250,100 @@ export class MinistoresService {
         );
       }
     }
+  }
+
+  /**
+   * Reemplaza las zonas de cobertura de la tienda. `undefined` no toca nada;
+   * cualquier lista (incluida []) reemplaza el conjunto. Valida que los ids
+   * existan en el catálogo (impide marcar zonas fuera de las definidas).
+   */
+  private async replaceCoverageZones(storeId: string, zoneIds?: number[]) {
+    if (zoneIds === undefined) return;
+    const unique = [...new Set(zoneIds)];
+    await this.ensureCoverageZonesExist(unique);
+    await this.storeCoverageZoneRepository.delete({ storeId });
+    if (unique.length > 0) {
+      await this.storeCoverageZoneRepository.save(
+        unique.map((zoneId) => ({ storeId, zoneId: String(zoneId) })),
+      );
+    }
+  }
+
+  private async ensureCoverageZonesExist(zoneIds: number[]) {
+    if (zoneIds.length === 0) return;
+    const found = await this.coverageZoneRepository.find({
+      where: { id: In(zoneIds.map((id) => String(id))), isActive: true },
+    });
+    if (found.length !== zoneIds.length) {
+      throw new BadRequestException('One or more coverageZoneIds are invalid');
+    }
+  }
+
+  /** Tamaño máximo (bytes) de una imagen de identidad decodificada. */
+  private static readonly MAX_IMAGE_BYTES = 3 * 1024 * 1024; // 3 MB
+
+  /**
+   * Decodifica una imagen base64 (data URI `data:image/...;base64,xxx` o base64
+   * puro) a bytes + mime. Devuelve null si la entrada es null/''. Lanza
+   * BadRequest si no es imagen o excede el tamaño máximo.
+   */
+  private decodeImageInput(
+    input: string | null | undefined,
+  ): { data: Buffer; mime: string } | null {
+    if (input === undefined || input === null) return null;
+    const trimmed = input.trim();
+    if (trimmed.length === 0) return null;
+
+    let mime: string | null = null;
+    let base64 = trimmed;
+    const match = /^data:([^;,]+);base64,(.*)$/s.exec(trimmed);
+    if (match) {
+      mime = match[1];
+      base64 = match[2];
+    }
+
+    if (mime && !mime.toLowerCase().startsWith('image/')) {
+      throw new BadRequestException('Solo se permiten imágenes (image/*)');
+    }
+
+    const data = Buffer.from(base64, 'base64');
+    if (data.length === 0) {
+      throw new BadRequestException('Imagen base64 inválida o vacía');
+    }
+    if (data.length > MinistoresService.MAX_IMAGE_BYTES) {
+      throw new BadRequestException('La imagen supera el máximo permitido (3 MB)');
+    }
+    return { data, mime: mime ?? 'image/jpeg' };
+  }
+
+  /** Reemplaza los bytes de imagen por un marcador para no inflar los audit logs. */
+  private redactStoreImages(obj: object): Record<string, unknown> {
+    const copy: Record<string, unknown> = { ...obj };
+    if ('logoImage' in copy) copy.logoImage = copy.logoImage ? '[blob]' : null;
+    if ('coverImage' in copy) copy.coverImage = copy.coverImage ? '[blob]' : null;
+    if ('imageBlob' in copy) copy.imageBlob = copy.imageBlob ? '[blob]' : null;
+    return copy;
+  }
+
+  /**
+   * Decodifica una imagen base64 y la PERSISTE como ARCHIVO vía el módulo media
+   * (disco + variantes optimized/thumbnail). Devuelve la URL preferida (relativa
+   * si MEDIA_PUBLIC_BASE_URL está vacío). Reemplaza el guardado como blob en BD.
+   */
+  private async uploadImageFromBase64(
+    base64: string,
+    ownerType: MediaOwnerType,
+    ownerId: number,
+  ): Promise<string | null> {
+    const decoded = this.decodeImageInput(base64);
+    if (!decoded) return null;
+    const asset = await this.mediaService.uploadAndProcessImage({
+      ownerType,
+      ownerId,
+      fileBuffer: decoded.data,
+      mimeType: decoded.mime,
+    });
+    return this.mediaService.resolvePreferredUrl(Number(asset.id));
   }
 
   private async resolveImageUrl(input: {

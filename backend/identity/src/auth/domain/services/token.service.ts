@@ -4,10 +4,16 @@ export interface AccessTokenClaims {
   sub: number;
   email: string;
   roles: string[];
+  /** Id del perfil activo (el gateway lo propaga como x-profile-id). */
+  profileId?: number;
+  /** Tipo del perfil activo (el gateway lo propaga como x-profile-type). */
+  profileType?: string;
 }
 
 /** Payload decodificado del access token (claims + marcas de tiempo del JWT). */
 export interface AccessTokenPayload extends AccessTokenClaims {
+  /** JWT id único (para revocación vía blocklist). */
+  jti?: string;
   iat?: number;
   exp?: number;
 }

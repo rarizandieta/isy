@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { MediaModule } from '../media/media.module.js';
 import { MinistoresService } from './application/ministores.service.js';
 import { AuditLogEntity } from './infrastructure/entities/audit-log.entity.js';
+import { CoverageZoneEntity } from './infrastructure/entities/coverage-zone.entity.js';
+import { MiniStoreCoverageZoneEntity } from './infrastructure/entities/mini-store-coverage-zone.entity.js';
 import { MiniStoreDeliveryOptionEntity } from './infrastructure/entities/mini-store-delivery-option.entity.js';
 import { MiniStorePaymentMethodEntity } from './infrastructure/entities/mini-store-payment-method.entity.js';
 import { MiniStoreEntity } from './infrastructure/entities/mini-store.entity.js';
@@ -14,6 +16,7 @@ import { StoreProductTagEntity } from './infrastructure/entities/store-product-t
 import { StoreSectionEntity } from './infrastructure/entities/store-section.entity.js';
 import { AuditLogsController } from './interfaces/http/audit-logs.controller.js';
 import { CatalogsController } from './interfaces/http/catalogs.controller.js';
+import { FeedController } from './interfaces/http/feed.controller.js';
 import { MinistoresController } from './interfaces/http/ministores.controller.js';
 
 @Module({
@@ -31,11 +34,18 @@ import { MinistoresController } from './interfaces/http/ministores.controller.js
         MiniStorePaymentMethodEntity,
         StoreProductEntity,
         AuditLogEntity,
+        CoverageZoneEntity,
+        MiniStoreCoverageZoneEntity,
       ],
       'ministores',
     ),
   ],
-  controllers: [MinistoresController, CatalogsController, AuditLogsController],
+  controllers: [
+    MinistoresController,
+    CatalogsController,
+    AuditLogsController,
+    FeedController,
+  ],
   providers: [MinistoresService],
 })
 export class MinistoresModule {}

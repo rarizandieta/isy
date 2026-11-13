@@ -8,6 +8,13 @@
       "when": 1794093874291,
       "tag": "0000_init_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794244525452,
+      "tag": "0001_curly_texas_twister",
+      "breakpoints": true
     }
   ]
 }
