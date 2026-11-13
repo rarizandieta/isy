@@ -13,7 +13,7 @@ import '../api_exception.dart';
 class AuthApi {
   AuthApi({http.Client? client, String? baseUrl})
       : _client = client ?? http.Client(),
-        _baseUrl = baseUrl ?? AppConfig.identityBaseUrl;
+        _baseUrl = baseUrl ?? AppConfig.gatewayBaseUrl;
 
   final http.Client _client;
   final String _baseUrl;

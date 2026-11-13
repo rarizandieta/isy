@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/result.dart';
 import '../../domain/models/auth_user.dart';
+import '../../domain/models/profile.dart';
 
 /// Fuente de verdad de la autenticación (capa de datos). Mantiene la sesión
 /// (usuario + tokens) y la respalda en almacenamiento seguro. Es un
@@ -18,6 +19,15 @@ abstract class AuthRepository extends ChangeNotifier {
 
   /// ¿Terminó ya el intento de restaurar la sesión al arrancar?
   bool get isInitialized;
+
+  /// Perfiles del usuario (vacío hasta que se cargan con [loadProfiles]).
+  List<Profile> get profiles;
+
+  /// Id del perfil activo (el que viaja en el token), o null.
+  int? get activeProfileId;
+
+  /// Perfil activo resuelto, o null si aún no hay perfiles cargados.
+  Profile? get activeProfile;
 
   /// Restaura la sesión guardada (valida con /me, refresca si hace falta).
   Future<void> restoreSession();
@@ -42,4 +52,17 @@ abstract class AuthRepository extends ChangeNotifier {
 
   /// Cierra sesión: revoca en el backend y limpia el almacenamiento local.
   Future<void> logout();
+
+  /// Carga/actualiza la lista de perfiles del usuario y el perfil activo.
+  Future<Result<void>> loadProfiles();
+
+  /// Crea un perfil (vendedor/servicios), lo activa y adopta el nuevo access
+  /// token que emite el backend.
+  Future<Result<void>> createProfile({
+    required ProfileType type,
+    required String displayName,
+  });
+
+  /// Cambia el perfil activo y adopta el nuevo access token.
+  Future<Result<void>> switchProfile(int profileId);
 }

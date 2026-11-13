@@ -2,24 +2,30 @@ import '../../core/result.dart';
 import '../../domain/failure.dart';
 import '../../domain/models/auth_session.dart';
 import '../../domain/models/auth_user.dart';
+import '../../domain/models/profile.dart';
 import '../api_exception.dart';
+import '../failure_mapper.dart';
 import '../services/auth_api.dart';
+import '../services/profile_api.dart';
 import '../services/token_storage.dart';
 import 'auth_repository.dart';
 
-/// Implementación del repositorio de autenticación. Orquesta el servicio HTTP
-/// (AuthApi) y el almacenamiento seguro (TokenStorage); traduce las excepciones
-/// de transporte a [Failure] semánticos.
+/// Implementación del repositorio de autenticación. Orquesta los servicios HTTP
+/// (AuthApi, ProfileApi) y el almacenamiento seguro (TokenStorage); traduce las
+/// excepciones de transporte a [Failure] semánticos.
 class AuthRepositoryImpl extends AuthRepository {
-  AuthRepositoryImpl(this._api, this._storage);
+  AuthRepositoryImpl(this._api, this._storage, this._profileApi);
 
   final AuthApi _api;
   final TokenStorage _storage;
+  final ProfileApi _profileApi;
 
   AuthUser? _user;
   String? _accessToken;
   String? _refreshToken;
   bool _initialized = false;
+  List<Profile> _profiles = const [];
+  int? _activeProfileId;
 
   @override
   AuthUser? get currentUser => _user;
@@ -32,6 +38,21 @@ class AuthRepositoryImpl extends AuthRepository {
 
   @override
   bool get isInitialized => _initialized;
+
+  @override
+  List<Profile> get profiles => List.unmodifiable(_profiles);
+
+  @override
+  int? get activeProfileId => _activeProfileId;
+
+  @override
+  Profile? get activeProfile {
+    if (_profiles.isEmpty) return null;
+    for (final p in _profiles) {
+      if (p.id == _activeProfileId) return p;
+    }
+    return _profiles.first;
+  }
 
   @override
   Future<void> restoreSession() async {
@@ -49,10 +70,12 @@ class AuthRepositoryImpl extends AuthRepository {
 
     try {
       _user = await _api.me(access);
+      await loadProfiles();
     } on ApiException {
       // Access inválido/caducado: intentar refrescar.
       try {
         await _applySession(await _api.refresh(refresh));
+        await loadProfiles();
       } catch (_) {
         await _clearSession(notify: false);
       }
@@ -74,6 +97,7 @@ class AuthRepositoryImpl extends AuthRepository {
     try {
       await _api.register(fullName: fullName, email: email, password: password);
       await _applySession(await _api.login(email: email, password: password));
+      await loadProfiles();
       return Ok(_user!);
     } catch (e) {
       return Err(_failureFrom(e));
@@ -87,6 +111,9 @@ class AuthRepositoryImpl extends AuthRepository {
   }) async {
     try {
       await _applySession(await _api.login(email: email, password: password));
+      // Cargamos los perfiles ya mismo para que el tema (color por perfil) y la
+      // UI conozcan el perfil activo en toda la app desde el inicio.
+      await loadProfiles();
       return Ok(_user!);
     } catch (e) {
       return Err(_failureFrom(e));
@@ -132,7 +159,69 @@ class AuthRepositoryImpl extends AuthRepository {
     }
   }
 
+  @override
+  Future<Result<void>> loadProfiles() async {
+    final access = _accessToken;
+    if (access == null) return const Err(Failure(FailureKind.unknown));
+    try {
+      final snapshot = await _profileApi.list(access);
+      _profiles = snapshot.profiles;
+      _activeProfileId = snapshot.activeProfileId;
+      notifyListeners();
+      return const Ok(null);
+    } catch (e) {
+      return Err(_failureFrom(e));
+    }
+  }
+
+  @override
+  Future<Result<void>> createProfile({
+    required ProfileType type,
+    required String displayName,
+  }) async {
+    final access = _accessToken;
+    if (access == null) return const Err(Failure(FailureKind.unknown));
+    try {
+      final mutation = await _profileApi.create(
+        access,
+        type: type.wire,
+        displayName: displayName,
+      );
+      await _applyProfileMutation(mutation);
+      return const Ok(null);
+    } catch (e) {
+      return Err(_failureFrom(e));
+    }
+  }
+
+  @override
+  Future<Result<void>> switchProfile(int profileId) async {
+    final access = _accessToken;
+    if (access == null) return const Err(Failure(FailureKind.unknown));
+    try {
+      final mutation = await _profileApi.activate(access, profileId);
+      await _applyProfileMutation(mutation);
+      return const Ok(null);
+    } catch (e) {
+      return Err(_failureFrom(e));
+    }
+  }
+
   // --- helpers ---------------------------------------------------------------
+
+  /// Al crear/cambiar de perfil, el backend emite un nuevo access token (el
+  /// perfil activo cambió). Adoptamos ese token y actualizamos los perfiles.
+  /// El refresh token NO cambia.
+  Future<void> _applyProfileMutation(ProfileMutation mutation) async {
+    _accessToken = mutation.accessToken;
+    _profiles = mutation.profiles;
+    _activeProfileId = mutation.activeProfileId;
+    final refresh = _refreshToken;
+    if (refresh != null) {
+      await _storage.save(accessToken: mutation.accessToken, refreshToken: refresh);
+    }
+    notifyListeners();
+  }
 
   Future<void> _applySession(AuthSession session) async {
     _accessToken = session.accessToken;
@@ -149,24 +238,11 @@ class AuthRepositoryImpl extends AuthRepository {
     _accessToken = null;
     _refreshToken = null;
     _user = null;
+    _profiles = const [];
+    _activeProfileId = null;
     await _storage.clear();
     if (notify) notifyListeners();
   }
 
-  Failure _failureFrom(Object e) {
-    if (e is ApiException) {
-      switch (e.statusCode) {
-        case 401:
-          return const Failure(FailureKind.invalidCredentials);
-        case 409:
-          return const Failure(FailureKind.emailAlreadyRegistered);
-        default:
-          return Failure(FailureKind.unknown, e.message);
-      }
-    }
-    if (e is NetworkException) {
-      return Failure(FailureKind.network, e.message);
-    }
-    return const Failure(FailureKind.unknown);
-  }
+  Failure _failureFrom(Object e) => failureFromError(e);
 }

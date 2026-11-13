@@ -4,6 +4,10 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Isy usa la cámara para tomar la foto de portada o el logo de tu Mini Tienda.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Isy accede a tus fotos para elegir la portada o el logo de tu Mini Tienda.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

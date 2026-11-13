@@ -8,6 +8,12 @@ import 'auth_session_view_model.dart';
 
 /// Decide qué pantalla mostrar según el estado de sesión (observa al
 /// AuthSessionViewModel).
+///
+/// Los permisos de cámara/galería NO se piden aquí al arrancar: pedirlos por
+/// adelantado abría el selector de fotos del sistema en el primer inicio. El
+/// `image_picker` los gestiona de forma contextual —la galería usa el Android
+/// Photo Picker (sin permiso) y la cámara pide su permiso— cuando el usuario
+/// realmente toca "Tomar foto" o "Elegir de la galería".
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 

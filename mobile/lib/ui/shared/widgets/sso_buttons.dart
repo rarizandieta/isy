@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 
 /// Botones de Single Sign-On (Apple / Google) con estilo de marca aproximado.
@@ -13,19 +14,25 @@ class SsoButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // "Continuar con Apple" solo aplica en iOS (Sign in with Apple). En Android
+    // (y otras plataformas) se oculta. Usamos defaultTargetPlatform para que
+    // funcione también en web, a diferencia de dart:io Platform.
+    final showApple = defaultTargetPlatform == TargetPlatform.iOS;
     return Column(
       children: [
-        // Apple
-        FilledButton.icon(
-          onPressed: () => onPressed('Apple'),
-          icon: const Icon(Icons.apple, size: 22),
-          label: const Text('Continuar con Apple'),
-          style: FilledButton.styleFrom(
-            backgroundColor: isDark ? Colors.white : Colors.black,
-            foregroundColor: isDark ? Colors.black : Colors.white,
+        // Apple (solo iOS)
+        if (showApple) ...[
+          FilledButton.icon(
+            onPressed: () => onPressed('Apple'),
+            icon: const Icon(Icons.apple, size: 22),
+            label: const Text('Continuar con Apple'),
+            style: FilledButton.styleFrom(
+              backgroundColor: isDark ? Colors.white : Colors.black,
+              foregroundColor: isDark ? Colors.black : Colors.white,
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
+          const SizedBox(height: 12),
+        ],
         // Google
         OutlinedButton.icon(
           onPressed: () => onPressed('Google'),

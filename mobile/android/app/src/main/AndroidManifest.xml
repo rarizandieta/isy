@@ -1,8 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Cámara para "Tomar foto": image_picker solicita este permiso en tiempo
+         de ejecución al momento de capturar. La galería usa el Android Photo
+         Picker, que NO requiere permisos de almacenamiento ni de fotos. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- La cámara no es obligatoria para instalar la app. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+
     <application
         android:label="isy"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Google Maps SDK: la key viene de local.properties vía manifestPlaceholders. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${MAPS_API_KEY}"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"
